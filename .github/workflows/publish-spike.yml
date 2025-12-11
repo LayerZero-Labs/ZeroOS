@@ -1,0 +1,146 @@
+name: Build and Publish Spike
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create a GitHub release"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  INSTALL_PREFIX: /tmp/opt/riscv
+  OUTPUT_DIR: /tmp/srv/spike-releases
+
+jobs:
+  build-spike:
+    name: Build Spike
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: Linux
+            arch: x86_64
+          - os: ubuntu-latest
+            platform: Linux
+            arch: aarch64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    outputs:
+      spike-version: ${{ steps.build.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Install dependencies (Linux)
+        if: matrix.platform == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential git device-tree-compiler
+
+      - name: Install dependencies (macOS)
+        if: matrix.platform == 'Darwin'
+        run: |
+          brew install dtc
+
+      - name: Build Spike
+        id: build
+        env:
+          PREFIX: ${{ env.INSTALL_PREFIX }}
+        run: |
+          ./scripts/spike-builder build
+          version=$("$PREFIX/bin/spike" --help 2>&1 | sed -n 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' || echo "unknown")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Package Spike
+        env:
+          PREFIX: ${{ env.INSTALL_PREFIX }}
+          NAME: spike
+          OUTDIR: ${{ env.OUTPUT_DIR }}
+        run: |
+          ./scripts/spike-builder package
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: spike-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ env.OUTPUT_DIR }}/spike-*-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
+
+  publish-release:
+    name: Publish GitHub Release
+    if: inputs.create_release
+    needs: build-spike
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout empty branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: empty-branch
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
+        with:
+          path: /tmp/artifacts
+
+      - name: Get Spike version
+        id: version
+        run: |
+          # Extract version from any artifact (they should all be the same)
+          cd /tmp/artifacts
+          tarball=$(find . -name "*.tar.gz" | head -1)
+          if [[ -n "$tarball" ]]; then
+            version=$(echo "$tarball" | sed -n 's/.*spike-\([0-9]\+\.[0-9]\+\.[0-9]\+\)-.*/\1/p')
+            echo "version=${version:-unknown}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=unknown" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create tag
+        id: tag
+        run: |
+          tag_name="spike-${{ steps.version.outputs.version }}"
+          echo "tag=$tag_name" >> "$GITHUB_OUTPUT"
+
+          # Create and push tag
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag_name" -m "Release Spike ${{ steps.version.outputs.version }}"
+          git push origin "$tag_name"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          body: |
+            ## Spike RISC-V Simulator ${{ steps.version.outputs.version }}
+
+            Pre-built Spike RISC-V ISA simulator for multiple platforms.
+
+            ### Supported Platforms
+            - **Linux x86_64**
+            - **Linux aarch64**
+            - **macOS x86_64** (Intel)
+            - **macOS arm64** (Apple Silicon)
+
+            ### Installation
+            ```bash
+            # Download the appropriate tarball for your platform
+            sudo mkdir -p /opt/riscv
+            sudo tar -xzf spike-*-<platform>-<arch>.tar.gz -C /opt/riscv
+            export PATH="/opt/riscv/bin:$PATH"
+            spike --help
+            ```
+
+            Built from commit: ${{ github.sha }}
+          files: /tmp/artifacts/**/*.tar.gz
+          draft: false
+          prerelease: false

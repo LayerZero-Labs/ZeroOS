@@ -1,0 +1,15 @@
+name: 'Install base packages'
+description: 'An action to install base packages'
+runs:
+  using: 'composite'
+  steps:
+    - name: Install base packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          ca-certificates \
+          curl \
+          build-essential \
+          pkg-config \
+          jq
+      shell: bash

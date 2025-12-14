@@ -1,11 +1,13 @@
 [workspace]
 members = [
   "xtask",
+  "crates/htif",
   "crates/zeroos",
   "crates/zeroos-foundation",
   "crates/zeroos-debug",
   "crates/zeroos-macros",
   "crates/zeroos-arch-riscv",
+  "crates/zeroos-scheduler-cooperative",
   "crates/zeroos-os-linux",
   "crates/zeroos-runtime-musl",
   "crates/zeroos-runtime-gnu",
@@ -15,7 +17,7 @@ members = [
   "crates/zeroos-allocator-bump",
   "crates/zeroos-allocator-linked-list",
   "crates/zeroos-allocator-buddy",
-  "crates/zeroos-vfs",
+  "crates/zeroos-vfs-core",
   "crates/zeroos-device-console",
   "crates/zeroos-device-null",
   "crates/zeroos-device-zero",
@@ -25,16 +27,20 @@ members = [
   "platforms/spike-platform",
   "platforms/spike-build",
   "examples/fibonacci",
-  "examples/stdlib",
-  "examples/rayon",
-  "examples/stdio/rust",
+  "examples/std-smoke",
+  "examples/c-smoke/rust",
 ]
 resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+description = "ZeroOS"
 
 [workspace.dependencies]
 # Internal workspace crates
 zeroos = { path = "crates/zeroos" }
-foundation = { path = "crates/zeroos-foundation", package = "zeroos-foundation", default-features = false }
+foundation = { path = "crates/zeroos-foundation", package = "zeroos-foundation" }
 debug = { path = "crates/zeroos-debug", package = "zeroos-debug" }
 zeroos-macros = { path = "crates/zeroos-macros" }
 arch-riscv = { path = "crates/zeroos-arch-riscv", package = "zeroos-arch-riscv" }
@@ -43,30 +49,37 @@ runtime-musl = { path = "crates/zeroos-runtime-musl", package = "zeroos-runtime-
 runtime-gnu = { path = "crates/zeroos-runtime-gnu", package = "zeroos-runtime-gnu" }
 runtime-nostd = { path = "crates/zeroos-runtime-nostd", package = "zeroos-runtime-nostd" }
 libunwind = { path = "crates/zeroos-libunwind", package = "zeroos-libunwind" }
-build = { path = "crates/zeroos-build", package = "zeroos-build" }
-allocator-bump = { path = "crates/zeroos-allocator-bump", package = "zeroos-allocator-bump" }
 allocator-linked-list = { path = "crates/zeroos-allocator-linked-list", package = "zeroos-allocator-linked-list" }
+allocator-bump = { path = "crates/zeroos-allocator-bump", package = "zeroos-allocator-bump" }
 allocator-buddy = { path = "crates/zeroos-allocator-buddy", package = "zeroos-allocator-buddy" }
-vfs = { path = "crates/zeroos-vfs", package = "zeroos-vfs" }
+vfs-core = { path = "crates/zeroos-vfs-core", package = "zeroos-vfs-core" }
 device-console = { path = "crates/zeroos-device-console", package = "zeroos-device-console" }
 device-null = { path = "crates/zeroos-device-null", package = "zeroos-device-null" }
-device-zero = { path = "crates/zeroos-device-zero", package = "zeroos-device-zero" }
 device-urandom = { path = "crates/zeroos-device-urandom", package = "zeroos-device-urandom" }
+device-zero = { path = "crates/zeroos-device-zero", package = "zeroos-device-zero" }
+scheduler-cooperative = { path = "crates/zeroos-scheduler-cooperative", package = "zeroos-scheduler-cooperative" }
 rng = { path = "crates/zeroos-rng", package = "zeroos-rng", default-features = false }
+
+build = { path = "crates/zeroos-build", package = "zeroos-build" }
+
+spike-platform = { path = "platforms/spike-platform", default-features = false }
+spike-build = { path = "platforms/spike-build", default-features = false }
+platform = { path = "platforms/platform", default-features = false }
+
+htif = { path = "crates/htif", default-features = false }
 
 # External dependencies
 spin = { version = "0.9", default-features = false }
-spike-platform = { path = "platforms/spike-platform" }
-spike-build = { path = "platforms/spike-build" }
-platform = { path = "platforms/platform" }
-htif = { path = "third-party/htif" }
-
-# External dependencies - Common
 cfg-if = "1.0"
 libc = "0.2"
 linked_list_allocator = "0.10"
+buddy_system_allocator = "0.11"
 memoffset = "0.9"
 const_format = "0.2"
+derive_builder = "0.20.0"
+clap-cargo = "0.18"
+serde_yaml = "0.9"
+rand_chacha = { version = "0.3", default-features = false }
 
 # RISC-V
 riscv = { version = "0.11", default-features = false }

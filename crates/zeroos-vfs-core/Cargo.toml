@@ -1,0 +1,11 @@
+[package]
+name = "zeroos-vfs-core"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+foundation = { workspace = true, features = ["vfs"] }
+libc = { workspace = true }
+
+[features]
+default = []

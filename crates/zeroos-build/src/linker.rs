@@ -11,6 +11,8 @@ pub struct LinkerConfig {
     pub heap_size: Option<usize>,
 
     pub stack_size: usize,
+
+    template: Option<String>,
 }
 
 impl Default for LinkerConfig {
@@ -26,6 +28,7 @@ impl LinkerConfig {
             memory_size: DEFAULT_MEMORY_SIZE,
             heap_size: None,
             stack_size: DEFAULT_STACK_SIZE,
+            template: None,
         }
     }
 
@@ -45,6 +48,11 @@ impl LinkerConfig {
         self
     }
 
+    pub fn with_template(mut self, template: String) -> Self {
+        self.template = Some(template);
+        self
+    }
+
     pub fn heap_size(&self) -> usize {
         self.heap_size
             .unwrap_or_else(|| self.memory_size.saturating_sub(self.stack_size))
@@ -58,19 +66,29 @@ pub const DEFAULT_MEMORY_SIZE: usize = 128 * 1024 * 1024;
 pub const DEFAULT_STACK_SIZE: usize = 4 * 1024 * 1024;
 
 impl LinkerConfig {
-    pub fn render(&self) -> String {
-        LINKER_SCRIPT_TEMPLATE
-            .replace("{MEMORY_ORIGIN}", &format!("{:#x}", self.memory_origin))
-            .replace("{MEMORY_SIZE}", &format!("{:#x}", self.memory_size))
-            .replace("{HEAP_SIZE}", &format!("{:#x}", self.heap_size()))
-            .replace("{STACK_SIZE}", &format!("{:#x}", self.stack_size))
+    pub fn render(&self, template: Option<String>) -> String {
+        let origin = format!("{:#x}", self.memory_origin);
+        let mem_size = format!("{:#x}", self.memory_size);
+        let heap_size = format!("{:#x}", self.heap_size());
+        let stack_size = format!("{:#x}", self.stack_size);
+
+        let template = template
+            .as_deref()
+            .or(self.template.as_deref())
+            .unwrap_or(LINKER_SCRIPT_TEMPLATE);
+
+        template
+            .replace("{MEMORY_ORIGIN}", &origin)
+            .replace("{MEMORY_SIZE}", &mem_size)
+            .replace("{HEAP_SIZE}", &heap_size)
+            .replace("{STACK_SIZE}", &stack_size)
     }
 }
 
 const LINKER_SCRIPT_TEMPLATE: &str = include_str!("files/linker.ld.template");
 
 pub fn generate_linker_script(config: &LinkerConfig, output_path: &Path) -> Result<()> {
-    let script_content = config.render();
+    let script_content = config.render(None);
     fs::write(output_path, script_content)
         .with_context(|| format!("Failed to write linker script to {}", output_path.display()))?;
     Ok(())

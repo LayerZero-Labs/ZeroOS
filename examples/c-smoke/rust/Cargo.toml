@@ -1,0 +1,11 @@
+[package]
+name = "c-staticlib"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+foundation = { workspace = true, features = ["std", "libc-main"] }
+spike-platform = { workspace = true, features = ["std"] }

@@ -1,7 +1,7 @@
 [package]
 name = "zeroos"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "ZeroOS - Kernel framework facade with auto-wiring"
 
 [lib]
@@ -13,95 +13,71 @@ default = []
 
 debug = [
   "debug/debug",
+  "foundation/debug",
   "arch-riscv?/debug",
   "runtime-musl?/debug",
-  "foundation/debug",
 ]
 bounds-checks = ["runtime-musl?/bounds-checks"]
 
-# Architecture support
-arch-riscv = ["dep:arch-riscv"]
+# Architecture
+arch-riscv = ["dep:arch-riscv", "scheduler-cooperative?/riscv"]
 
-# Trap handling
-trap = ["foundation/trap"]
-
-# OS layers
+# OS
 os-linux = ["dep:os-linux"]
 
-# Memory allocators
-alloc-linked-list = [
-  "dep:allocator-linked-list",
-  "foundation/memory",
-  "runtime-nostd?/memory",
-  "os-linux?/memory",
-]
-alloc-buddy = [
-  "dep:allocator-buddy",
-  "foundation/memory",
-  "runtime-nostd?/memory",
-  "os-linux?/memory",
-]
-alloc-bump = [
-  "dep:allocator-bump",
-  "foundation/memory",
-  "runtime-nostd?/memory",
-  "os-linux?/memory",
-]
-
-# Runtimes
+# Runtime
+runtime-nostd = ["dep:runtime-nostd"]
 runtime-musl = ["dep:runtime-musl"]
 runtime-gnu = ["dep:runtime-gnu"]
-runtime-nostd = ["dep:runtime-nostd"]
+libunwind = ["dep:libunwind"]
 
-# VFS core
-vfs = ["dep:vfs", "foundation/memory", "foundation/vfs", "os-linux?/vfs"]
+# Capabilities
+## Memory
+memory = ["foundation/memory", "runtime-nostd?/memory", "os-linux?/memory"]
+alloc-linked-list = ["memory", "dep:allocator-linked-list"]
+alloc-buddy = ["memory", "dep:allocator-buddy"]
+alloc-bump = ["memory", "dep:allocator-bump"]
 
-# VFS devices
+## VFS
+vfs = ["dep:vfs-core", "foundation/vfs", "os-linux?/vfs"]
 vfs-device-console = ["vfs", "dep:device-console"]
 vfs-device-null = ["vfs", "dep:device-null"]
 vfs-device-zero = ["vfs", "dep:device-zero"]
 vfs-device-urandom = ["vfs", "random", "dep:device-urandom"]
 
-# Random subsystem
-random = ["foundation/random", "os-linux?/random"]
+## Scheduler
+scheduler = ["foundation/scheduler", "os-linux?/scheduler"]
+scheduler-cooperative = ["scheduler", "dep:scheduler-cooperative"]
 
-# RNG implementations
+## Random
+random = ["foundation/random", "os-linux?/random"]
 rng-lcg = ["random", "dep:rng", "rng/lcg"]
 rng-chacha = ["random", "dep:rng", "rng/chacha"]
 
-# Unwind support
-libunwind = ["dep:libunwind"]
-
 [dependencies]
-foundation = { workspace = true, default-features = false }
 debug = { workspace = true }
 zeroos-macros.workspace = true
+foundation = { workspace = true }
 arch-riscv = { workspace = true, optional = true }
-
-# OS layers (optional)
 os-linux = { workspace = true, optional = true }
-
-# Unwind support (optional)
 libunwind = { workspace = true, optional = true }
 
-# Allocators (optional)
+runtime-nostd = { workspace = true, optional = true }
+runtime-musl = { workspace = true, optional = true }
+runtime-gnu = { workspace = true, optional = true }
+
 allocator-linked-list = { workspace = true, optional = true }
 allocator-buddy = { workspace = true, optional = true }
 allocator-bump = { workspace = true, optional = true }
 
-# Runtimes (optional)
-runtime-musl = { workspace = true, optional = true }
-runtime-gnu = { workspace = true, optional = true }
-runtime-nostd = { workspace = true, optional = true }
-
-# VFS and devices (optional)
-vfs = { workspace = true, optional = true }
+vfs-core = { workspace = true, optional = true }
 device-console = { workspace = true, optional = true }
 device-null = { workspace = true, optional = true }
 device-zero = { workspace = true, optional = true }
 device-urandom = { workspace = true, optional = true }
 
-# Random subsystem (optional)
+scheduler-cooperative = { workspace = true, optional = true }
+
 rng = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "none")'.dependencies]

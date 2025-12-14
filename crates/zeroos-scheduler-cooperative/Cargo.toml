@@ -1,0 +1,20 @@
+[package]
+name = "zeroos-scheduler-cooperative"
+version.workspace = true
+edition.workspace = true
+description = "Cooperative scheduler implementation for ZeroOS"
+
+[lib]
+name = "zeroos_scheduler_cooperative"
+path = "src/lib.rs"
+
+[dependencies]
+foundation = { workspace = true, features = ["scheduler"] }
+libc = { workspace = true }
+arch-riscv = { workspace = true, optional = true }
+zeroos-macros = { workspace = true }
+cfg-if.workspace = true
+
+[features]
+default = []
+riscv = ["arch-riscv"]

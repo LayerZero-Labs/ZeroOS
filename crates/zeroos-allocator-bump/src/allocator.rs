@@ -2,8 +2,12 @@ use core::alloc::Layout;
 use core::ptr;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(test)]
+extern crate alloc;
+
 pub(crate) struct BumpAllocator {
     next: AtomicUsize,
+
     end: AtomicUsize,
 }
 
@@ -17,14 +21,18 @@ impl BumpAllocator {
 
     pub(crate) fn init(&self, heap_start: usize, heap_size: usize) {
         self.next.store(heap_start, Ordering::SeqCst);
-        self.end.store(heap_start + heap_size, Ordering::SeqCst);
+        let end = heap_start.checked_add(heap_size).unwrap_or(heap_start);
+        self.end.store(end, Ordering::SeqCst);
     }
 
     pub(crate) fn alloc(&self, layout: Layout) -> *mut u8 {
         loop {
             let current = self.next.load(Ordering::Acquire);
 
-            let aligned = align_up(current, layout.align());
+            // Align the allocation
+            let Some(aligned) = align_up(current, layout.align()) else {
+                return ptr::null_mut();
+            };
             let new_next = aligned.saturating_add(layout.size());
 
             if new_next > self.end.load(Ordering::Acquire) {
@@ -57,10 +65,15 @@ impl BumpAllocator {
     }
 }
 
+/// Align value up to the given alignment.
+/// - `value`: Value to align
 /// - `align`: Alignment (must be power of 2)
 #[inline]
-fn align_up(value: usize, align: usize) -> usize {
-    (value + align - 1) & !(align - 1)
+fn align_up(value: usize, align: usize) -> Option<usize> {
+    if align == 0 {
+        return None;
+    }
+    value.checked_add(align - 1).map(|v| v & !(align - 1))
 }
 
 pub(crate) static ALLOCATOR: BumpAllocator = BumpAllocator::new();
@@ -110,7 +123,7 @@ mod tests {
     #[test]
     fn test_bump_alloc() {
         const HEAP_SIZE: usize = 1024 * 1024;
-        let mut heap_mem = vec![0u8; HEAP_SIZE];
+        let mut heap_mem = alloc::vec![0u8; HEAP_SIZE];
         let heap_start = heap_mem.as_mut_ptr() as usize;
 
         init(heap_start, HEAP_SIZE);
@@ -131,7 +144,7 @@ mod tests {
     #[test]
     fn test_bump_out_of_memory() {
         const HEAP_SIZE: usize = 1024;
-        let mut heap_mem = vec![0u8; HEAP_SIZE];
+        let mut heap_mem = alloc::vec![0u8; HEAP_SIZE];
         let heap_start = heap_mem.as_mut_ptr() as usize;
 
         init(heap_start, HEAP_SIZE);
@@ -144,7 +157,7 @@ mod tests {
     #[test]
     fn test_alignment() {
         const HEAP_SIZE: usize = 1024 * 1024;
-        let mut heap_mem = vec![0u8; HEAP_SIZE];
+        let mut heap_mem = alloc::vec![0u8; HEAP_SIZE];
         let heap_start = heap_mem.as_mut_ptr() as usize;
 
         init(heap_start, HEAP_SIZE);

@@ -1,24 +1,25 @@
+//! Platforms MUST provide `trap_handler(regs: *mut TrapFrame)` which receives
+
 #![no_std]
 #![recursion_limit = "2048"]
 
 pub mod boot;
-#[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
-mod handler;
+
 pub mod trap;
 
-// External functions that platforms/runtimes MUST provide.
 extern "C" {
-    // Platform hardware initialization.
+    // Platform bootstrap hook (sets up heap, device fds, etc).
     fn __platform_bootstrap();
-
-    // Runtime initialization - never returns.
+    // Runtime bootstrap hook (transfers into libc/runtime initialization).
     fn __runtime_bootstrap() -> !;
-
-    // M-mode trap handler.
-    pub fn trap_handler(regs: *mut PtRegs);
+    // Trap entry point called by the assembly trap vector.
+    pub fn trap_handler(regs: *mut TrapFrame);
 }
 
-pub use boot::{__bootstrap, _start};
+mod riscv {
+    pub use crate::boot::{__bootstrap, _start};
+    pub use crate::trap::{decode_trap, PtRegs, TrapFrame, _default_trap_handler};
+    pub use riscv::register::mcause::{Exception, Interrupt, Trap};
+}
 
-pub use riscv::register::mcause::{Exception, Interrupt, Trap};
-pub use trap::{decode_trap, PtRegs};
+pub use riscv::*;

@@ -7,7 +7,7 @@ use tracing::{debug, info};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Parser)]
-#[command(name = "cargo-bolt")]
+#[command(name = "cargo-zeroos")]
 #[command(bin_name = "cargo")]
 #[command(version, about, long_about = None)]
 struct Cli {
@@ -17,20 +17,23 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    Bolt(BoltArgs),
+    Zeroos(ZeroosArgs),
 }
 
 #[derive(Parser)]
-struct BoltArgs {
+struct ZeroosArgs {
     #[command(subcommand)]
-    command: BoltCommands,
+    command: ZeroosCommands,
 }
 
 #[derive(Subcommand)]
-enum BoltCommands {
-    Build(BoltBuildArgs),
+enum ZeroosCommands {
+    Build(ZeroosBuildArgs),
+
     BuildMusl(BuildMuslArgs),
+
     FindMusl(FindMuslArgs),
+
     Generate(GenerateArgs),
 }
 
@@ -42,18 +45,19 @@ struct GenerateArgs {
 
 #[derive(Subcommand)]
 enum GenerateCmd {
-    Target(BoltGenerateTargetArgs),
-    Linker(BoltGenerateLinkerArgs),
+    Target(ZeroosGenerateTargetArgs),
+
+    Linker(ZeroosGenerateLinkerArgs),
 }
 
 #[derive(Args, Debug)]
-struct BoltBuildArgs {
+struct ZeroosBuildArgs {
     #[command(flatten)]
     base: zeroos_build::cmds::BuildArgs,
 }
 
 #[derive(Args)]
-struct BoltGenerateTargetArgs {
+struct ZeroosGenerateTargetArgs {
     #[command(flatten)]
     base: zeroos_build::cmds::GenerateTargetArgs,
 
@@ -62,7 +66,7 @@ struct BoltGenerateTargetArgs {
 }
 
 #[derive(Args)]
-struct BoltGenerateLinkerArgs {
+struct ZeroosGenerateLinkerArgs {
     #[command(flatten)]
     base: zeroos_build::cmds::GenerateLinkerArgs,
 
@@ -103,17 +107,17 @@ fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Commands::Bolt(bolt_args) => match bolt_args.command {
-            BoltCommands::Build(args) => build_command(args),
-            BoltCommands::BuildMusl(args) => {
+        Commands::Zeroos(args) => match args.command {
+            ZeroosCommands::Build(args) => build_command(args),
+            ZeroosCommands::BuildMusl(args) => {
                 build_musl(args);
                 Ok(())
             }
-            BoltCommands::FindMusl(args) => {
+            ZeroosCommands::FindMusl(args) => {
                 find_musl(args);
                 Ok(())
             }
-            BoltCommands::Generate(gen_args) => match gen_args.command {
+            ZeroosCommands::Generate(gen_args) => match gen_args.command {
                 GenerateCmd::Target(args) => generate_target_command(args),
                 GenerateCmd::Linker(args) => generate_linker_command(args),
             },
@@ -127,9 +131,9 @@ fn main() {
 }
 
 fn expand_tilde(path: &str) -> String {
-    if path.starts_with("~/") {
+    if let Some(stripped) = path.strip_prefix("~/") {
         if let Some(home) = dirs::home_dir() {
-            return home.join(&path[2..]).to_string_lossy().to_string();
+            return home.join(stripped).to_string_lossy().to_string();
         }
     }
     path.to_string()
@@ -220,7 +224,7 @@ fn find_musl(args: FindMuslArgs) {
 Toolchain not found for {}
 
 To build the toolchain:
-  cargo bolt build-musl
+  cargo zeroos build-musl
 
 Or set environment variables:
   export RISCV_MUSL_PATH=/path/to/musl/lib
@@ -252,7 +256,7 @@ Environment variables:
     );
 }
 
-fn generate_target_command(cli_args: BoltGenerateTargetArgs) -> Result<()> {
+fn generate_target_command(cli_args: ZeroosGenerateTargetArgs) -> Result<()> {
     use zeroos_build::cmds::generate_target_spec;
     use zeroos_build::spec::{load_target_profile, parse_target_triple};
 
@@ -292,7 +296,7 @@ fn generate_target_command(cli_args: BoltGenerateTargetArgs) -> Result<()> {
     Ok(())
 }
 
-fn generate_linker_command(cli_args: BoltGenerateLinkerArgs) -> Result<()> {
+fn generate_linker_command(cli_args: ZeroosGenerateLinkerArgs) -> Result<()> {
     use zeroos_build::cmds::generate_linker_script;
 
     debug!("Generating linker script with args: {:?}", cli_args.base);
@@ -316,7 +320,7 @@ fn generate_linker_command(cli_args: BoltGenerateLinkerArgs) -> Result<()> {
     Ok(())
 }
 
-fn build_command(args: BoltBuildArgs) -> Result<()> {
+fn build_command(args: ZeroosBuildArgs) -> Result<()> {
     use zeroos_build::cmds::{build_binary, find_workspace_root, get_or_build_toolchain, StdMode};
 
     debug!("build_command: {:?}", args);
@@ -336,7 +340,7 @@ fn build_command(args: BoltBuildArgs) -> Result<()> {
         None
     };
 
-    build_binary(&workspace_root, &args.base, toolchain_paths)?;
+    build_binary(&workspace_root, &args.base, toolchain_paths, None)?;
 
     Ok(())
 }

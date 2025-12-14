@@ -1,11 +1,14 @@
 #![no_std]
 
 use core::ptr::null_mut;
-use vfs::{noop_close, noop_ioctl, noop_seek, FdEntry, FileOps};
+use vfs_core::{noop_close, noop_ioctl, noop_seek, FdEntry, FileOps};
 
 fn zero_read(_file: *mut u8, buf: *mut u8, count: usize) -> isize {
+    if count == 0 {
+        return 0;
+    }
     if buf.is_null() {
-        return vfs::EBADF;
+        return -(libc::EFAULT as isize);
     }
 
     unsafe {

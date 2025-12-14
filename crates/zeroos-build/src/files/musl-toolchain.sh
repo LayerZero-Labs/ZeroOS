@@ -13,31 +13,31 @@ set -ex
 set -o pipefail
 
 hide_output() {
-	set +x
+  set +x
+  
+  cleanup() {
+    if [ -n "${PING_LOOP_PID:-}" ]; then
+      kill "$PING_LOOP_PID" 2>/dev/null || true
+      wait "$PING_LOOP_PID" 2>/dev/null || true
+      PING_LOOP_PID=""
+    fi
+    rm -f /tmp/build.log
+  }
 
-	cleanup() {
-		if [ -n "${PING_LOOP_PID:-}" ]; then
-			kill "$PING_LOOP_PID" 2>/dev/null || true
-			wait "$PING_LOOP_PID" 2>/dev/null || true
-			PING_LOOP_PID=""
-		fi
-		rm -f /tmp/build.log
-	}
-
-	on_err() {
-		echo "ERROR: An error was encountered with the build."
-		cat /tmp/build.log
-		cleanup
-		exit 1
-	}
-
-	trap on_err ERR INT TERM
-	bash -c 'while true; do sleep 30; echo $(date) - building ...; done' &
-	PING_LOOP_PID=$!
-	"$@" &>/tmp/build.log
-	trap - ERR INT TERM
-	cleanup
-	set -x
+  on_err() {
+    echo "ERROR: An error was encountered with the build."
+    cat /tmp/build.log
+    cleanup
+    exit 1
+  }
+  
+  trap on_err ERR INT TERM
+  bash -c 'while true; do sleep 30; echo $(date) - building ...; done' &
+  PING_LOOP_PID=$!
+  "$@" &> /tmp/build.log
+  trap - ERR INT TERM
+  cleanup
+  set -x
 }
 
 ARCH=$1
@@ -77,7 +77,7 @@ mkdir -p "${GCC_DIR}"
 # Fix zlib's fdopen detection on macOS
 # Problem: zlib incorrectly detects macOS and disables fdopen, causing build failures
 # Solution: Only apply the old MACOS behavior for non-Apple compilers
-cat <<'PATCH' >"${BINUTILS_DIR}/9001-fix-zlib-fdopen-macos.patch"
+cat <<'PATCH' > "${BINUTILS_DIR}/9001-fix-zlib-fdopen-macos.patch"
 --- binutils-2.33.1.orig/zlib/zutil.h   2019-09-09 21:19:45
 +++ binutils-2.33.1/zlib/zutil.h        2025-11-13 23:06:51
 @@ -130,7 +130,7 @@
@@ -95,7 +95,7 @@ PATCH
 # Problem: 'inline' without 'static' in header files causes undefined symbol errors
 #          on macOS when linking (e.g., "_bswap_16" not found)
 # Solution: Change 'inline' to 'static inline' to ensure each translation unit gets its own copy
-cat <<'PATCH' >"${BINUTILS_DIR}/9002-fix-libctf-swap-macos.patch"
+cat <<'PATCH' > "${BINUTILS_DIR}/9002-fix-libctf-swap-macos.patch"
 --- binutils-2.33.1.orig/libctf/swap.h  2025-11-14 11:46:00
 +++ binutils-2.33.1/libctf/swap.h      2025-11-14 11:45:23
 @@ -28,13 +28,13 @@
@@ -136,7 +136,7 @@ PATCH
 # Problem: Old K&R-style 'char *getcwd();' declaration conflicts with modern
 #          POSIX 'char *getcwd(char *, size_t)' from unistd.h on macOS SDK
 # Solution: Only declare getcwd() if unistd.h is NOT included
-cat <<'PATCH' >"${BINUTILS_DIR}/9003-fix-intl-dcigettext-macos.patch"
+cat <<'PATCH' > "${BINUTILS_DIR}/9003-fix-intl-dcigettext-macos.patch"
 --- binutils-2.33.1.orig/intl/dcigettext.c      2019-09-09 21:19:44
 +++ binutils-2.33.1/intl/dcigettext.c  2025-11-14 15:49:56
 @@ -147,7 +147,7 @@
@@ -154,7 +154,7 @@ PATCH
 # Problem: Old K&R-style 'char *getcwd();' declaration conflicts with modern
 #          POSIX 'char *getcwd(char *, size_t)' from unistd.h on macOS SDK
 # Solution: Only declare getcwd() if unistd.h is NOT included
-cat <<'PATCH' >"${GCC_DIR}/9004-fix-intl-dcigettext-macos.patch"
+cat <<'PATCH' > "${GCC_DIR}/9004-fix-intl-dcigettext-macos.patch"
 --- gcc-9.4.0.orig/intl/dcigettext.c      2019-09-09 21:19:44
 +++ gcc-9.4.0/intl/dcigettext.c  2025-11-14 15:49:56
 @@ -147,7 +147,7 @@
@@ -173,7 +173,7 @@ PATCH
 #          "_host_hooks" undefined symbol errors during linking
 # Solution: Create host-aarch64-darwin.c and x-darwin build file, register in config.host
 #           This follows the same pattern as i386/x86_64 Darwin hosts
-cat <<'PATCH' >"${GCC_DIR}/9006-fix-aarch64-darwin-host.patch"
+cat <<'PATCH' > "${GCC_DIR}/9006-fix-aarch64-darwin-host.patch"
 --- /dev/null
 +++ gcc-9.4.0/gcc/config/aarch64/host-aarch64-darwin.c
 @@ -0,0 +1,32 @@
@@ -234,7 +234,7 @@ PATCH
 # Problem: On Apple Silicon Macs, 'uname -p' returns 'arm' (32-bit identifier)
 #          instead of 'aarch64', causing incorrect host triplet 'arm-apple-darwin'
 # Solution: Map 'arm' and 'arm64' processor types to 'aarch64' for GNU toolchain compatibility
-cat <<'PATCH' >"${GCC_DIR}/9007-fix-config-guess-aarch64-darwin.patch"
+cat <<'PATCH' > "${GCC_DIR}/9007-fix-config-guess-aarch64-darwin.patch"
 --- gcc-9.4.0.orig/config.guess
 +++ gcc-9.4.0/config.guess
 @@ -1342,6 +1342,8 @@
@@ -248,7 +248,7 @@ cat <<'PATCH' >"${GCC_DIR}/9007-fix-config-guess-aarch64-darwin.patch"
  	exit ;;
 PATCH
 
-cat <<'PATCH' >"${GCC_DIR}/9008-fix-macos-libcpp-ctype-conflict.patch"
+cat <<'PATCH' > "${GCC_DIR}/9008-fix-macos-libcpp-ctype-conflict.patch"
 --- gcc-9.4.0.orig/gcc/system.h	2025-11-16 07:14:02
 +++ gcc-9.4.0/gcc/system.h	2025-11-16 07:15:22
 @@ -201,19 +201,6 @@
@@ -296,4 +296,5 @@ PATCH
 hide_output make -j$(nproc) TARGET=$TARGET MUSL_VER=1.2.3 LINUX_HEADERS_SITE=$LINUX_HEADERS_SITE LINUX_VER=$LINUX_VER GCC_CONFIG_FOR_TARGET="$GCC_CONFIG_FOR_TARGET"
 hide_output make install TARGET=$TARGET MUSL_VER=1.2.3 LINUX_HEADERS_SITE=$LINUX_HEADERS_SITE LINUX_VER=$LINUX_VER OUTPUT=$OUTPUT GCC_CONFIG_FOR_TARGET="$GCC_CONFIG_FOR_TARGET"
 
-printf '!<arch>\n' | tee $OUTPUT/$TARGET/lib/libunwind.a >/dev/null
+printf '!<arch>\n' | tee $OUTPUT/$TARGET/lib/libunwind.a > /dev/null
+

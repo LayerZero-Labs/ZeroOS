@@ -1,13 +1,13 @@
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct SyscallArgs {
-    pub nr: usize,   // Syscall number (from a7)
-    pub arg0: usize, // a0
-    pub arg1: usize, // a1
-    pub arg2: usize, // a2
-    pub arg3: usize, // a3
-    pub arg4: usize, // a4
-    pub arg5: usize, // a5
+    pub nr: usize,
+    pub arg0: usize,
+    pub arg1: usize,
+    pub arg2: usize,
+    pub arg3: usize,
+    pub arg4: usize,
+    pub arg5: usize,
 }
 
 impl SyscallArgs {

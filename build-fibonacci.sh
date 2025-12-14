@@ -1,24 +1,34 @@
-#!/bin/bash
-# Build and run fibonacci using cargo-spike
+#!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
-PROJECT_ROOT="$(cargo metadata --format-version=1 --no-deps | jq -r '.workspace_root')"
+export RUSTUP_NO_UPDATE_CHECK=1
+PROFILE="dev"
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd))"
+cd "${ROOT}"
 
-echo "Building cargo-bolt..."
-cargo build -p zeroos-build --bin cargo-bolt --release --quiet
-
-echo "Building cargo-spike..."
-cargo build -p spike-build --bin cargo-spike --release --quiet
-
-export PATH="${PROJECT_ROOT}/target/release:$HOME/.local/riscv/bin/:$PATH"
-
-echo "Building fibonacci in no-std mode..."
 # no-std mode
-cargo spike build -p fibonacci --features=debug --quiet
-cargo spike run target/riscv64imac-unknown-none-elf/debug/fibonacci --isa RV64IMAC --instructions 10000000
+echo "Building fibonacci example in no-std mode ..."
+TARGET_TRIPLE="riscv64imac-unknown-none-elf"
+OUT_DIR="${ROOT}/target/${TARGET_TRIPLE}/$([ "$PROFILE" = "dev" ] && echo debug || echo "$PROFILE")"
+BIN="${OUT_DIR}/fibonacci"
 
-echo "Building fibonacci in std mode..."
-# std mode - enable vfs, memory, and thread features for syscall support
-cargo spike build -p fibonacci --mode std --features=std,debug --quiet
-RUST_LOG=debug cargo spike run target/riscv64imac-zero-linux-musl/debug/fibonacci --isa RV64IMAC --instructions 100000000 -l --log fib-std.log
+cargo spike build -p fibonacci --target "${TARGET_TRIPLE}" --quiet --features=debug --profile "${PROFILE}"
+OUT_NOSTD="$(mktemp)"
+OUT_STD="$(mktemp)"
+trap 'rm -f "${OUT_NOSTD}" "${OUT_STD}"' EXIT
+
+RUST_LOG=debug cargo spike run "${BIN}" --isa RV64IMAC --instructions 10000000 | tee "${OUT_NOSTD}"
+grep -q "fibonacci(10) = 55" "${OUT_NOSTD}"
+grep -q "Test PASSED" "${OUT_NOSTD}"
+
+# std mode
+echo "Building fibonacci example in std mode ..."
+TARGET_TRIPLE="riscv64imac-zero-linux-musl"
+OUT_DIR="${ROOT}/target/${TARGET_TRIPLE}/$([ "$PROFILE" = "dev" ] && echo debug || echo "$PROFILE")"
+BIN="${OUT_DIR}/fibonacci"
+
+cargo spike build -p fibonacci --target "${TARGET_TRIPLE}" --mode std --quiet --features=std,debug --profile "${PROFILE}"
+RUST_LOG=debug cargo spike run "${BIN}" --isa RV64IMAC --instructions 100000000 | tee "${OUT_STD}"
+grep -q "fibonacci(10) = 55" "${OUT_STD}"
+grep -q "Test PASSED" "${OUT_STD}"

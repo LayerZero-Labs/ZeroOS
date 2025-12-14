@@ -1,5 +1,3 @@
-//! - Cannot free individual allocations
-
 #![no_std]
 
 mod allocator;

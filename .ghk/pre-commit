@@ -6,143 +6,203 @@ edition = "2021"
 globset = "0.4"
 log = "0.4"
 env_logger = "0.11"
+derive_builder = "0.20"
 ---
 
+use derive_builder::Builder;
+use std::os::unix::fs::PermissionsExt;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     env,
     path::{Path, PathBuf},
     process::{Command, ExitStatus, Stdio},
+    sync::OnceLock,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
 // sh! command execution
 
-enum StreamMode {
-    Inherit,
-    Pipe,
-    Null,
+/// Trait for types that can configure a `Command` before execution.
+pub trait ShConfig {
+    /// Apply configuration to the given `Command`.
+    fn apply(&self, cmd: &mut Command);
 }
 
-struct ShOptions {
-    stdout: StreamMode,
-    stderr: StreamMode,
-    cwd: Option<PathBuf>,
-    quiet: bool,
+// Allow using `&T` where `T: ShConfig`.
+impl<T: ShConfig + ?Sized> ShConfig for &T {
+    fn apply(&self, cmd: &mut Command) {
+        (*self).apply(cmd)
+    }
 }
 
-impl Default for ShOptions {
-    fn default() -> Self {
-        Self {
-            stdout: StreamMode::Inherit,
-            stderr: StreamMode::Inherit,
-            cwd: None,
-            quiet: false,
+#[rustfmt::skip]
+#[derive(Copy, Clone, Default)]
+pub enum StreamMode { #[default] Inherit, Pipe, Null }
+
+impl From<StreamMode> for Stdio {
+    fn from(m: StreamMode) -> Self {
+        match m {
+            StreamMode::Inherit => Stdio::inherit(),
+            StreamMode::Pipe => Stdio::piped(),
+            StreamMode::Null => Stdio::null(),
         }
     }
 }
 
-impl ShOptions {
-    fn apply_to(&self, cmd: &mut Command) {
-        match self.stdout {
-            StreamMode::Inherit => cmd.stdout(Stdio::inherit()),
-            StreamMode::Pipe => cmd.stdout(Stdio::piped()),
-            StreamMode::Null => cmd.stdout(Stdio::null()),
-        };
+#[derive(Clone, Default, Builder)]
+#[builder(default)]
+pub struct ShOptions {
+    pub stdout: StreamMode,
+    pub stderr: StreamMode,
+    pub cwd: Option<PathBuf>,
+    pub quiet: bool,
+}
 
-        match self.stderr {
-            StreamMode::Inherit => cmd.stderr(Stdio::inherit()),
-            StreamMode::Pipe => cmd.stderr(Stdio::piped()),
-            StreamMode::Null => cmd.stderr(Stdio::null()),
-        };
-
-        if let Some(ref dir) = self.cwd {
+impl ShConfig for ShOptions {
+    fn apply(&self, cmd: &mut Command) {
+        cmd.stdout(Stdio::from(self.stdout))
+            .stderr(Stdio::from(self.stderr));
+        if let Some(dir) = &self.cwd {
             cmd.current_dir(dir);
         }
     }
 }
 
-struct ShOutput {
-    status: ExitStatus,
-    stdout: String,
-    stderr: String,
-}
+pub struct ShOutput(pub ExitStatus, pub String, pub String);
 
-macro_rules! parse_sh_options {
-    () => {{
-        ShOptions::default()
-    }};
+static PIPE_OPTS: OnceLock<ShOptions> = OnceLock::new();
 
-    (stdout = pipe $(, $rest:tt)*) => {{
-        let mut opts = parse_sh_options!($($rest)*);
-        opts.stdout = StreamMode::Pipe;
-        opts
-    }};
+fn pipe_opts() -> &'static ShOptions {
+    PIPE_OPTS.get_or_init(|| {
+        let verbose = env::var("VERBOSE")
+            .map(|v| v == "1" || v.to_lowercase() == "true")
+            .unwrap_or(false);
 
-    (stdout = inherit $(, $rest:tt)*) => {{
-        let mut opts = parse_sh_options!($($rest)*);
-        opts.stdout = StreamMode::Inherit;
-        opts
-    }};
-
-    (stderr = pipe $(, $rest:tt)*) => {{
-        let mut opts = parse_sh_options!($($rest)*);
-        opts.stderr = StreamMode::Pipe;
-        opts
-    }};
-
-    (stderr = inherit $(, $rest:tt)*) => {{
-        let mut opts = parse_sh_options!($($rest)*);
-        opts.stderr = StreamMode::Inherit;
-        opts
-    }};
-
-    (cwd = $dir:expr $(, $rest:tt)*) => {{
-        let mut opts = parse_sh_options!($($rest)*);
-        opts.cwd = Some(PathBuf::from($dir));
-        opts
-    }};
-
-    (quiet = true $(, $rest:tt)*) => {{
-        let mut opts = parse_sh_options!($($rest)*);
-        opts.quiet = true;
-        opts
-    }};
-}
-
-macro_rules! sh {
-    (options($($opt:tt)*), $fmt:literal $(, $args:expr)* $(,)?) => {{
-        let opts = parse_sh_options!($($opt)*);
-        let cmd = format!($fmt $(, $args)*);
-        sh(&cmd, opts)
-    }};
-
-    ($fmt:literal $(, $args:expr)* $(,)?) => {{
-        let opts = ShOptions::default();
-        let cmd = format!($fmt $(, $args)*);
-        sh(&cmd, opts)
-    }};
-}
-
-fn sh(cmd: &str, opts: ShOptions) -> Result<ShOutput> {
-    if !opts.quiet {
-        log::debug!("[sh] {}", cmd);
-    }
-
-    let mut command = Command::new("sh");
-    command.arg("-c").arg(cmd);
-    opts.apply_to(&mut command);
-
-    let output = command.output()?;
-
-    Ok(ShOutput {
-        status: output.status,
-        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        ShOptionsBuilder::default()
+            .stdout(StreamMode::Pipe)
+            .quiet(!verbose)
+            .build()
+            .unwrap()
     })
 }
 
+#[macro_export]
+macro_rules! sh {
+    // argv mode (options): program + bracketed args list
+    (options($opts:expr), $prog:expr, [$($arg:expr),* $(,)?] $(,)?) => {{
+        sh(
+            ShCmd::Argv(
+                std::ffi::OsString::from($prog),
+                vec![$(std::ffi::OsString::from($arg)),*],
+            ),
+            $opts,
+        )
+    }};
+
+    // argv mode (default options): program + bracketed args list
+    ($prog:expr, [$($arg:expr),* $(,)?] $(,)?) => {{
+        sh(
+            ShCmd::Argv(
+                std::ffi::OsString::from($prog),
+                vec![$(std::ffi::OsString::from($arg)),*],
+            ),
+            ShOptions::default(),
+        )
+    }};
+
+    // with options + arbitrary expression (already a String/&str)
+    (options($opts:expr), $cmd:expr) => {{
+        let cmd = $cmd.to_string();
+        sh(ShCmd::Script(cmd), $opts)
+    }};
+
+    // without options + arbitrary expression
+    ($cmd:expr) => {{
+        let cmd = $cmd.to_string();
+        sh(ShCmd::Script(cmd), ShOptions::default())
+    }};
+}
+
+enum ShCmd {
+    Script(String),
+    Argv(std::ffi::OsString, Vec<std::ffi::OsString>),
+}
+
+fn sh(cmd: ShCmd, opts: ShOptions) -> Result<ShOutput> {
+    fn exec(
+        mut c: Command,
+        opts: &ShOptions,
+        desc: &str,
+        cleanup: Option<&Path>,
+    ) -> Result<ShOutput> {
+        opts.apply(&mut c);
+        let output = c.output()?;
+        if let Some(p) = cleanup {
+            let _ = std::fs::remove_file(p);
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+
+        if !output.status.success() {
+            return Err(format!(
+                "Command failed with exit code {:?}: {}\nStderr: {}",
+                output.status.code(),
+                desc,
+                stderr
+            )
+            .into());
+        }
+        Ok(ShOutput(output.status, stdout, stderr))
+    }
+
+    fn build_argv(program: &std::ffi::OsString, args: &[std::ffi::OsString]) -> (Command, String) {
+        let mut c = Command::new(program);
+        c.args(args);
+        let desc = format!("(argv) {:?} {:?}", program, args);
+        (c, desc)
+    }
+
+    fn build_script(cmd: &str) -> Result<(Command, String, Option<std::path::PathBuf>)> {
+        let cmd_trim = cmd.trim_start();
+        if cmd_trim.starts_with("#!") {
+            let path = std::env::temp_dir().join(format!(
+                "zk-pre-commit-{}-{}.tmp",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            ));
+            std::fs::write(&path, cmd_trim)?;
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o700))?;
+            Ok((Command::new(&path), cmd_trim.to_string(), Some(path)))
+        } else {
+            let mut c = Command::new("sh");
+            // Important: don't trim in the `sh -c` path; it can change shell script semantics.
+            c.arg("-c").arg(cmd);
+            Ok((c, cmd_trim.to_string(), None))
+        }
+    }
+
+    match cmd {
+        ShCmd::Argv(program, args) => {
+            if !opts.quiet {
+                log::debug!("[sh] (argv) {:?} {:?}", program, args);
+            }
+            let (c, desc) = build_argv(&program, &args);
+            exec(c, &opts, &desc, None)
+        }
+        ShCmd::Script(cmd) => {
+            let (c, desc, cleanup) = build_script(&cmd)?;
+            if !opts.quiet {
+                log::debug!("[sh] {}", desc);
+            }
+            exec(c, &opts, &desc, cleanup.as_deref())
+        }
+    }
+}
 // file types
 
 struct FileTypeRule {
@@ -154,84 +214,42 @@ struct FileTypeRule {
 }
 
 macro_rules! file_types {
-    (
-        $(
-            $lang:ident => {
-                exts: [$($ext:expr),* $(,)?],
-                names: [$($name:expr),* $(,)?],
-                shebang: [$($she:expr),* $(,)?],
-                modeline: [$($mode:expr),* $(,)?],
-            }
-        ),* $(,)?
-    ) => {
-        static FILE_TYPE_RULES: &[FileTypeRule] = &[
-            $(
-                FileTypeRule {
-                    lang: stringify!($lang),
-                    exts: &[$($ext),*],
-                    names: &[$($name),*],
-                    shebang: &[$($she),*],
-                    modeline: &[$($mode),*],
-                }
-            ),*
-        ];
-    };
+    ($($lang:ident => { exts: [$($ext:expr),* $(,)?], names: [$($name:expr),* $(,)?], shebang: [$($she:expr),* $(,)?], modeline: [$($mode:expr),* $(,)?], },)*) => {
+        static FILE_TYPE_RULES: &[FileTypeRule] = &[$(
+            FileTypeRule { lang: stringify!($lang), exts: &[$($ext),*], names: &[$($name),*], shebang: &[$($she),*], modeline: &[$($mode),*] }
+        ),*];
+    }
 }
 
 file_types! {
-    rust => {
-        exts: ["rs"],
-        names: [],
-        shebang: ["rust", "cargo"],
-        modeline: ["mode: rust", "ft=rust"],
-    },
-    shell => {
-        exts: ["sh", "bash", "zsh"],
-        names: [],
-        shebang: ["bash", "sh", "zsh"],
-        modeline: ["mode: sh", "ft=sh"],
-    },
+    rust => { exts: ["rs"], names: [], shebang: ["rust","cargo"], modeline: ["mode: rust","ft=rust"], },
+    shell => { exts: ["sh","bash","zsh"], names: [], shebang: ["bash","sh","zsh"], modeline: ["mode: sh","ft=sh"], },
 }
 
 fn detect_file_type(path: &Path) -> Option<&'static str> {
     let filename = path.file_name()?.to_str()?;
     let ext = path.extension().and_then(|e| e.to_str());
-
-    // extension or filename
-    for rule in FILE_TYPE_RULES {
-        if let Some(ext) = ext {
-            if rule.exts.contains(&ext) {
-                return Some(rule.lang);
-            }
-        }
-        if rule.names.contains(&filename) {
-            return Some(rule.lang);
-        }
+    if let Some(lang) = FILE_TYPE_RULES
+        .iter()
+        .find(|r| ext.map_or(false, |e| r.exts.contains(&e)) || r.names.contains(&filename))
+        .map(|r| r.lang)
+    {
+        return Some(lang);
     }
 
-    // shebang / modeline
-    if let Ok(content) = std::fs::read_to_string(path) {
-        let lines: Vec<&str> = content.lines().collect();
-        let head = lines.iter().take(5);
-        let tail = lines.iter().rev().take(5);
-        for line in head.chain(tail) {
-            for rule in FILE_TYPE_RULES {
-                if rule
-                    .shebang
+    std::fs::read_to_string(path).ok().and_then(|content| {
+        let lines: Vec<_> = content.lines().collect();
+        let mut scan = lines.iter().take(5).chain(lines.iter().rev().take(5));
+        scan.find_map(|line| {
+            FILE_TYPE_RULES.iter().find_map(|r| {
+                (r.shebang
                     .iter()
                     .any(|s| line.starts_with("#!") && line.contains(s))
-                {
-                    return Some(rule.lang);
-                }
-
-                if rule.modeline.iter().any(|m| line.contains(m)) {
-                    return Some(rule.lang);
-                }
-            }
-        }
-    }
-
-    None
+                    || r.modeline.iter().any(|m| line.contains(m)))
+                .then_some(r.lang)
+            })
+        })
+    })
 }
 
 // filter! macro
@@ -301,12 +319,11 @@ struct Context {
 
 impl Context {
     fn new() -> Result<Self> {
-        let output = sh!(options(stdout = pipe), "git rev-parse --show-toplevel")?;
-        if !output.status.success() {
-            return Err("not in a git repository".into());
-        }
-
-        let root = PathBuf::from(output.stdout.trim());
+        let output = sh!(
+            options(pipe_opts().clone()),
+            "git rev-parse --show-toplevel"
+        )?;
+        let root = PathBuf::from(output.1.trim());
         Ok(Context { root })
     }
 }
@@ -341,10 +358,10 @@ fn find_upwards_bounded(start: &Path, patterns: &[&str], stop_at: &Path) -> Opti
 // task system
 
 fn restage_file(file: &Path) -> Result<()> {
-    let out = sh!("git add {}", file.display())?;
-    if !out.status.success() {
-        return Err("failed to re-stage formatted file".into());
+    if !file.exists() {
+        return Ok(());
     }
+    sh!("git", ["add", "--", file.as_os_str()])?;
     Ok(())
 }
 
@@ -378,8 +395,33 @@ macro_rules! define_task {
     };
 }
 
-// Rust tasks
+macro_rules! fmt_task {
+    ($type:ident,
+     $name:expr,
+     patterns = [$($pat:expr),*],
+     lang = $lang:expr,
+     run = $action:expr $(,)?
+    ) => {
+        define_task!(
+            $type,
+            name = $name,
+            depends_on = [],
+            run = |_ctx: &Context, files: &[PathBuf]| {
+                let targets = collect_files(files, &[$($pat),*], $lang)
+                    .into_iter()
+                    .filter(|f| f.exists())
+                    .collect::<Vec<_>>();
+                let action = $action;
+                for f in &targets {
+                    let _ = action(f)?;
+                }
+                Ok(targets)
+            }
+        );
+    };
+}
 
+// Rust tasks
 define_task!(
     RustClippyTask,
     name = "rust_clippy",
@@ -387,104 +429,212 @@ define_task!(
     run = |ctx: &Context, files: &[PathBuf]| {
         let interesting = filter!(files, ["*.rs", "Cargo.toml"]);
 
-        let mut crate_roots = HashSet::new();
-        for f in &interesting {
-            if let Some(matched) = find_upwards_bounded(f, &["Cargo.toml"], &ctx.root) {
-                if let Some(parent) = matched.parent() {
-                    crate_roots.insert(parent.to_path_buf());
-                }
-            }
+        let manifests: HashSet<PathBuf> = interesting
+            .iter()
+            .filter_map(|f| find_upwards_bounded(f, &["Cargo.toml"], &ctx.root))
+            .map(|m| if m.is_absolute() { m } else { ctx.root.join(m) })
+            .collect();
+
+        let mut packages: Vec<String> = manifests
+            .iter()
+            .filter_map(|m| package_name_from_manifest(m))
+            .collect();
+        packages.sort();
+        packages.dedup();
+
+        let filtered: Vec<String> = packages
+            .into_iter()
+            .filter(|p| matrix_has_package(ctx, p))
+            .collect();
+
+        if filtered.is_empty() {
+            return Ok(interesting);
         }
 
-        for root in crate_roots {
-            let out = sh!(
-                options(cwd = root.clone()),
-                "cargo clippy --fix --allow-dirty --allow-staged"
-            )?;
-            if !out.status.success() {
-                return Err("cargo clippy failed".into());
-            }
+        let mut argv: Vec<std::ffi::OsString> = vec![
+            "run".into(),
+            "-q".into(),
+            "-p".into(),
+            "xtask".into(),
+            "--".into(),
+            "matrix".into(),
+        ];
+        for p in &filtered {
+            argv.push("-p".into());
+            argv.push(p.into());
         }
+        argv.push("--command".into());
+        argv.push("fix".into());
+
+        let mut opts = pipe_opts().clone();
+        opts.cwd = Some(ctx.root.clone());
+        sh(ShCmd::Argv("cargo".into(), argv), opts)?;
 
         Ok(interesting)
     }
 );
 
-define_task!(
+fmt_task!(
     RustFmtTask,
-    name = "rust_fmt",
-    depends_on = ["rust_clippy"],
-    run = |_ctx: &Context, files: &[PathBuf]| {
-        let rs_files = collect_files(files, &["*.rs"], "rust");
-
-        for f in &rs_files {
-            let out = sh!("rustfmt {}", f.display())?;
-            if !out.status.success() {
-                return Err("rustfmt failed".into());
-            }
-        }
-
-        Ok(rs_files)
-    }
+    "rust_fmt",
+    patterns = ["*.rs"],
+    lang = "rust",
+    run = |f: &PathBuf| sh!("rustfmt", [f.as_os_str()]),
 );
-
-define_task!(
+fmt_task!(
     ShellFmtTask,
-    name = "shell_fmt",
-    depends_on = [],
-    run = |_ctx: &Context, files: &[PathBuf]| {
-        let sh_files = collect_files(files, &["*.sh"], "shell");
-
-        for f in &sh_files {
-            let out = sh!("shfmt -w {}", f.display())?;
-            if !out.status.success() {
-                return Err("shfmt failed".into());
-            }
-        }
-
-        Ok(sh_files)
-    }
+    "shell_fmt",
+    patterns = ["*.sh"],
+    lang = "shell",
+    run = |f: &PathBuf| sh!("shfmt", ["-w", f.as_os_str()]),
 );
-
-define_task!(
+fmt_task!(
     TomlFmtTask,
-    name = "toml_fmt",
-    depends_on = [],
-    run = |_ctx: &Context, files: &[PathBuf]| {
-        let toml_files = filter!(files, ["*.toml"]);
-
-        for f in &toml_files {
-            let out = sh!("taplo format {}", f.display())?;
-            if !out.status.success() {
-                return Err("taplo format failed".into());
-            }
-        }
-
-        Ok(toml_files)
-    }
+    "toml_fmt",
+    patterns = ["*.toml"],
+    lang = "toml",
+    run = |f: &PathBuf| sh!("taplo", ["format", f.as_os_str()]),
 );
-
-define_task!(
+fmt_task!(
     DenoFmtTask,
-    name = "deno_fmt",
-    depends_on = [],
-    run = |_ctx: &Context, files: &[PathBuf]| {
-        let deno_files = filter!(files, ["*.json", "*.yaml", "*.yml", "*.md", "*.jsonc"]);
+    "deno_fmt",
+    patterns = [
+        "*.json", "*.yaml", "*.yml", "*.md", "*.jsonc", "*.ts", "*.mjs", "*.js", "*.cjs", "*.tsx",
+        "*.jsx", "*.html", "*.css", "*.scss", "*.mdx"
+    ],
+    lang = "deno",
+    run = |f: &PathBuf| sh!("deno", ["fmt", f.as_os_str()]),
+);
 
-        for f in &deno_files {
-            let out = sh!("deno fmt {}", f.display())?;
-            if !out.status.success() {
-                return Err("deno fmt failed".into());
+fn main() {
+    env_logger::Builder::from_default_env()
+        .format(|buf, record| {
+            use std::io::Write;
+            writeln!(buf, "[{}] {}", record.target(), record.args())
+        })
+        .init();
+
+    if let Err(e) = run() {
+        log::error!("[pre-commit] error: {e}");
+        std::process::exit(1);
+    }
+
+    println!("[pre-commit] all tasks completed successfully!");
+    std::process::exit(0);
+}
+
+fn run() -> Result<()> {
+    let mut mode: Option<FilesMode> = None;
+    let mut files: Vec<PathBuf> = Vec::new();
+    for arg in env::args().skip(1) {
+        match arg.as_str() {
+            "--staged" => {
+                if mode == Some(FilesMode::Dirty) {
+                    return Err("--dirty and --staged are mutually exclusive".into());
+                }
+                mode = Some(FilesMode::Staged);
+            }
+            "--dirty" => {
+                if mode == Some(FilesMode::Staged) {
+                    return Err("--dirty and --staged are mutually exclusive".into());
+                }
+                mode = Some(FilesMode::Dirty);
+            }
+            _ => files.push(PathBuf::from(arg)),
+        }
+    }
+    let mode = mode.unwrap_or(FilesMode::Staged);
+
+    if files.is_empty() {
+        files = match mode {
+            FilesMode::Staged => staged_paths()?,
+            FilesMode::Dirty => dirty_paths()?,
+        };
+        if files.is_empty() {
+            println!(
+                "[pre-commit] no {} files to check, skipping.",
+                match mode {
+                    FilesMode::Staged => "staged",
+                    FilesMode::Dirty => "dirty",
+                }
+            );
+            return Ok(());
+        }
+    }
+
+    let ctx = Context::new()?;
+
+    // only stash unstaged changes for files that are staged.
+    // In --dirty mode, we intentionally do NOT stash/keep-index/pop.
+    let unstaged_in_staged: Vec<PathBuf> = if mode == FilesMode::Staged {
+        let unstaged = unstaged_paths()?;
+        files
+            .iter()
+            .filter(|p| unstaged.contains(*p))
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let stash_added = if mode == FilesMode::Staged {
+        stash_unstaged_keep_index(&unstaged_in_staged)?
+    } else {
+        false
+    };
+
+    let tasks: Vec<Box<dyn Task>> = vec![
+        Box::new(RustClippyTask::default()),
+        Box::new(RustFmtTask::default()),
+        Box::new(ShellFmtTask::default()),
+        Box::new(TomlFmtTask::default()),
+        Box::new(DenoFmtTask::default()),
+    ];
+
+    let task_result: Result<Vec<PathBuf>> =
+        run_tasks(tasks, &ctx, &files, mode == FilesMode::Staged);
+
+    if let Ok(processed_files) = &task_result {
+        if !processed_files.is_empty() {
+            println!("[pre-commit] processed {} files:", processed_files.len());
+            for file in processed_files {
+                println!("  {}", file.display());
             }
         }
-
-        Ok(deno_files)
     }
-);
+
+    let pop_result: Result<()> = if stash_added {
+        sh!("git stash pop --quiet")
+            .map(|_| ())
+            .map_err(|e| {
+                let files = join_paths(&unstaged_in_staged);
+                format!(
+                    "{e}\n[pre-commit] failed to restore unstaged changes for staged files: {files}\n\
+                     Resolve the conflict (stash is kept), or stage/stash those unstaged changes and retry."
+                )
+                .into()
+            })
+    } else {
+        Ok(())
+    };
+
+    match (task_result.map(|_| ()), pop_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(e), Ok(())) => Err(e),
+        (Ok(()), Err(e)) => Err(e),
+        (Err(task_err), Err(pop_err)) => Err(format!(
+            "tasks failed: {task_err}; additionally failed to restore unstaged changes: {pop_err}"
+        )
+        .into()),
+    }
+}
 
 // task runner
-
-fn run_tasks(tasks: Vec<Box<dyn Task>>, ctx: &Context, files: &[PathBuf]) -> Result<Vec<PathBuf>> {
+fn run_tasks(
+    tasks: Vec<Box<dyn Task>>,
+    ctx: &Context,
+    files: &[PathBuf],
+    restage: bool,
+) -> Result<Vec<PathBuf>> {
     let mut name_to_index = HashMap::new();
     for (i, t) in tasks.iter().enumerate() {
         if name_to_index.insert(t.name(), i).is_some() {
@@ -508,11 +658,15 @@ fn run_tasks(tasks: Vec<Box<dyn Task>>, ctx: &Context, files: &[PathBuf]) -> Res
         }
     }
 
-    let mut queue = VecDeque::new();
-    for (name, &deg) in &indegree {
-        if deg == 0 {
-            queue.push_back(*name);
-        }
+    let mut queue: VecDeque<&'static str> = indegree
+        .iter()
+        .filter_map(|(&name, &deg)| (deg == 0).then_some(name))
+        .collect();
+    queue.make_contiguous().sort_unstable();
+
+    for neighbors in graph.values_mut() {
+        neighbors.sort_unstable();
+        neighbors.dedup();
     }
 
     let mut ordered = Vec::new();
@@ -546,67 +700,133 @@ fn run_tasks(tasks: Vec<Box<dyn Task>>, ctx: &Context, files: &[PathBuf]) -> Res
         }
     }
 
-    // Restage all processed files after all tasks complete
-    for file in &all_processed_files {
-        restage_file(file)?;
+    if restage {
+        for file in &all_processed_files {
+            restage_file(file)?;
+        }
     }
 
     Ok(all_processed_files)
 }
 
-// entry point
-
-fn main() {
-    env_logger::init();
-
-    if let Err(e) = real_main() {
-        log::error!("[pre-commit] error: {e}");
-        std::process::exit(1);
-    }
-
-    println!("[pre-commit] all tasks completed successfully!");
-    std::process::exit(0);
+fn capture(cmd: &str) -> Result<String> {
+    Ok(sh!(options(pipe_opts().clone()), cmd)?.1)
 }
 
-fn real_main() -> Result<()> {
-    let mut files: Vec<PathBuf> = env::args().skip(1).map(PathBuf::from).collect();
+fn current_stash_ref() -> Result<String> {
+    Ok(
+        capture("git rev-parse -q --verify refs/stash 2>/dev/null || true")?
+            .trim()
+            .to_string(),
+    )
+}
 
-    // If no files provided as arguments, get staged files from Git
-    if files.is_empty() {
-        let output = sh!(options(stdout = pipe), "git diff --cached --name-only")?;
-        files = output
-            .stdout
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(PathBuf::from)
-            .collect();
+fn parse_nul_paths(out: &str) -> Vec<PathBuf> {
+    out.split('\0')
+        .filter(|s| !s.is_empty())
+        .map(PathBuf::from)
+        .collect()
+}
 
-        if files.is_empty() {
-            println!("[pre-commit] no staged files to check, skipping.");
-            return Ok(());
+fn join_paths(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn package_name_from_manifest(manifest_path: &Path) -> Option<String> {
+    let s = std::fs::read_to_string(manifest_path).ok()?;
+    let mut in_package = false;
+    for line in s.lines() {
+        let line = line.trim();
+        if line.starts_with('[') && line.ends_with(']') {
+            in_package = line == "[package]";
+            continue;
+        }
+        if !in_package {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("name") {
+            let rest = rest.trim_start();
+            if let Some(rest) = rest.strip_prefix('=') {
+                let rest = rest.trim();
+                if let Some(stripped) = rest.strip_prefix('"').and_then(|r| r.strip_suffix('"')) {
+                    return Some(stripped.to_string());
+                }
+            }
         }
     }
+    None
+}
 
-    let ctx = Context::new()?;
+fn matrix_has_package(ctx: &Context, package: &str) -> bool {
+    let path = ctx.root.join("matrix.yaml");
+    if !path.exists() {
+        return false;
+    }
+    let s = match std::fs::read_to_string(&path) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
 
-    let tasks: Vec<Box<dyn Task>> = vec![
-        Box::new(RustClippyTask::default()),
-        Box::new(RustFmtTask::default()),
-        Box::new(ShellFmtTask::default()),
-        Box::new(TomlFmtTask::default()),
-        Box::new(DenoFmtTask::default()),
-    ];
+    let needle = format!("package: {}", package);
+    s.lines().any(|l| l.trim() == needle)
+}
 
-    let processed_files = run_tasks(tasks, &ctx, &files)?;
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum FilesMode {
+    Staged,
+    Dirty,
+}
 
-    if !processed_files.is_empty() {
-        println!("[pre-commit] processed {} files:", processed_files.len());
-        for file in &processed_files {
-            println!("  {}", file.display());
-        }
+fn dirty_paths() -> Result<Vec<PathBuf>> {
+    let mut out = Vec::new();
+    // Unstaged modifications (but not staged).
+    out.extend(parse_nul_paths(&capture("git diff --name-only -z")?));
+    // Untracked files.
+    out.extend(parse_nul_paths(&capture(
+        "git ls-files --others --exclude-standard -z",
+    )?));
+    out.sort();
+    out.dedup();
+    Ok(out)
+}
+
+fn unstaged_paths() -> Result<Vec<PathBuf>> {
+    Ok(parse_nul_paths(&capture("git diff --name-only -z")?))
+}
+
+fn staged_paths() -> Result<Vec<PathBuf>> {
+    Ok(parse_nul_paths(&capture(
+        "git diff --cached --name-only -z",
+    )?))
+}
+
+fn stash_unstaged_keep_index(paths: &[PathBuf]) -> Result<bool> {
+    if paths.is_empty() {
+        return Ok(false);
     }
 
-    Ok(())
+    let before = current_stash_ref()?;
+
+    let mut c = Command::new("git");
+    c.args(["stash", "push", "--keep-index", "--quiet", "--"]);
+    c.args(paths);
+
+    let output = c.output()?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        return Err(format!(
+            "Command failed with exit code {:?}: git stash push --keep-index --quiet -- <paths>\nStderr: {}",
+            output.status.code(),
+            stderr
+        ).into());
+    }
+
+    let after = current_stash_ref()?;
+    Ok(!after.is_empty() && after != before)
 }
 
 // -*- mode: rust -*-

@@ -1,5 +1,3 @@
-//! Target specifications for ZeroOS platforms
-
 mod arch;
 mod llvm;
 mod profiles;
@@ -14,5 +12,4 @@ pub use profiles::{
 pub use target::TargetConfig;
 pub use utils::parse_target_triple;
 
-/// Generic target spec template for Linux (architecture-agnostic)
 const GENERIC_LINUX_TEMPLATE: &str = include_str!("../files/generic-linux.json.template");

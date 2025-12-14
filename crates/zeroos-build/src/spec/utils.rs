@@ -4,6 +4,10 @@ use crate::spec::llvm::LLVMConfig;
 use crate::spec::ArchSpec;
 
 pub fn parse_target_triple(target: &str) -> Option<TargetConfig> {
+    // Parse target triple: {arch}-{vendor}-{sys}[-{abi}]
+
+    //   - riscv64gc-unknown-linux-musl (with abi)
+    //   - aarch64-apple-darwin (without abi)
     let parts: Vec<&str> = target.split('-').collect();
     if parts.len() < 3 || parts.len() > 4 {
         return None;

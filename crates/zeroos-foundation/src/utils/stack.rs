@@ -2,12 +2,15 @@ use core::marker::PhantomData;
 use core::mem;
 use core::ptr;
 
+/// # Safety
+/// Caller must ensure `sp` points to writable memory and respects
 pub struct DownwardStack<T> {
     sp: usize,
     _marker: PhantomData<T>,
 }
 
 impl<T> DownwardStack<T> {
+    /// The initial sp will be aligned to meet architecture-specific ABI requirements:
     #[inline]
     pub fn new(initial_sp: usize) -> Self {
         cfg_if::cfg_if! {
@@ -18,10 +21,13 @@ impl<T> DownwardStack<T> {
                 target_arch = "aarch64",
                 target_arch = "x86",
             ))] {
+
                 let min_align = 16;
             } else if #[cfg(target_arch = "arm")] {
+
                 let min_align = 8;
             } else {
+
                 let min_align = 2 * mem::size_of::<usize>();
             }
         }
@@ -34,6 +40,8 @@ impl<T> DownwardStack<T> {
         }
     }
 
+    /// # Safety
+    /// Caller must ensure there is sufficient stack space below the current sp.
     #[inline]
     pub unsafe fn push(&mut self, value: T) {
         self.sp -= mem::size_of::<T>();
@@ -42,6 +50,8 @@ impl<T> DownwardStack<T> {
         }
     }
 
+    /// # Safety
+    /// Caller must ensure there is a valid value at the current sp.
     #[inline]
     pub unsafe fn pop(&mut self) -> T {
         let value = unsafe { ptr::read(self.sp as *const T) };
@@ -49,6 +59,8 @@ impl<T> DownwardStack<T> {
         value
     }
 
+    /// # Safety
+    /// Caller must ensure the computed address contains a valid value of type T.
     #[inline]
     pub unsafe fn pick(&self, offset: isize) -> T {
         let addr = self.addr_at(offset);

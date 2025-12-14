@@ -51,9 +51,7 @@ jobs:
 
       - name: Run clippy
         run: |
-          # RUSTFLAGS="-Awarnings" silences all compiler warnings
-          RUSTFLAGS="-A warnings" cargo clippy --workspace --
-        continue-on-error: false
+          cargo matrix clippy
 
   check:
     name: Check
@@ -70,7 +68,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - name: Check
         run: |
-          cargo check --verbose --workspace
+          cargo matrix check
 
   build:
     name: Build
@@ -83,10 +81,12 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
         with:
           submodules: true
+      - uses: ./.github/actions/install-base
+      - uses: ./.github/actions/setup-rust
 
       - name: Build Release
         run: |
-          # just build
+          cargo matrix build
 
   basics-checks:
     name: Basic checks

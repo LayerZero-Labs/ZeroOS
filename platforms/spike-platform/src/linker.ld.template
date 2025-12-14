@@ -3,12 +3,12 @@ ENTRY(_start)
 
 MEMORY
 {
-    RAM (rwx) : ORIGIN = {origin:#x}, LENGTH = {mem_size:#x}
+    RAM (rwx) : ORIGIN = {MEMORY_ORIGIN}, LENGTH = {MEMORY_SIZE}
 }
 
 /* Reserve heap and stack sizes */
-__heap_size = {heap_size:#x};
-__stack_size = {stack_size:#x};
+__heap_size = {HEAP_SIZE};
+__stack_size = {STACK_SIZE};
 
 PHDRS
 {
@@ -20,7 +20,7 @@ PHDRS
 
 SECTIONS
 {
-    . = {origin:#x};
+    . = {MEMORY_ORIGIN};
     PROVIDE_HIDDEN(__ehdr_start = .);
     
     .text : {

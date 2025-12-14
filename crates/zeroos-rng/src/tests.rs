@@ -1,4 +1,3 @@
-#[cfg(all(test, feature = "chacha"))]
 mod chacha_tests {
     use crate::chacha::ChaChaState;
 
@@ -56,7 +55,6 @@ mod chacha_tests {
     }
 }
 
-#[cfg(all(test, feature = "lcg"))]
 mod lcg_tests {
     use crate::lcg::LcgState;
 
@@ -104,7 +102,6 @@ mod lcg_tests {
         assert_eq!(rng2.next_u64(), v2);
         assert_eq!(rng2.next_u64(), v3);
 
-        // Values should not be zero or trivial
         assert_ne!(v1, 0);
         assert_ne!(v2, 0);
         assert_ne!(v3, 0);

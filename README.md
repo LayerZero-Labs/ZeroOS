@@ -76,15 +76,31 @@ execution model while preserving the familiar POSIX/Linux syscall interface.
 
 ### Prepare
 
-```
+```bash
 ./bootstrap
 ```
 
 ### Examples
 
-```
+```bash
 ./build-fibonacci.sh
-./build-stdli.sh
+./build-std-smoke.sh
+./build-c-smoke.sh
+```
+
+### Check/Lint/Format/Test
+
+```bash
+cargo matrix fix
+cargo matrix fmt
+cargo matrix check
+cargo matrix test
+```
+
+or
+
+```bash
+cargo massage
 ```
 
 ## License

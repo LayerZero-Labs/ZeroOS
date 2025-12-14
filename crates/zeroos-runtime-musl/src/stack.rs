@@ -1,4 +1,3 @@
-// Defined here to avoid libc dependency for bare-metal targets
 const AT_NULL: usize = 0;
 const AT_PHDR: usize = 3;
 const AT_PHENT: usize = 4;
@@ -14,7 +13,6 @@ const AT_SECURE: usize = 23;
 const AT_RANDOM: usize = 25;
 const AT_HWCAP: usize = 16;
 
-/// This is a minimal implementation to avoid dependencies.
 struct DownwardStack<T> {
     sp: usize,
     #[cfg(feature = "bounds-checks")]
@@ -90,21 +88,28 @@ fn generate_random_bytes(entropy: &[u64]) -> (u64, u64) {
     (random_low, random_high)
 }
 
+/// The stack layout follows the System V ABI and Linux kernel conventions.
+/// # Safety
+/// Caller must ensure:
 #[inline]
 pub unsafe fn build_musl_stack(
     stack_top: usize,
     stack_bottom: usize,
-    _ehdr_start: usize, // Reserved for future use, currently unused for cycle efficiency
+    _ehdr_start: usize,
     program_name: &'static [u8],
 ) -> usize {
     let mut ds = DownwardStack::<usize>::new(stack_top, stack_bottom);
 
+    // Zero-auxv approach: Tell musl that program headers are not available.
     // This avoids expensive ELF parsing at runtime (critical for zkVM cycle efficiency).
+    // Musl will skip PT_TLS parsing and use builtin TLS, which is sufficient for
+    // single-threaded bare-metal execution.
     let at_phdr = 0;
     let at_phent = 0;
     let at_phnum = 0;
     let at_entry = 0;
 
+    // Prepare auxiliary vector entries
     let auxv_entries = [
         (AT_PHDR, at_phdr),
         (AT_PHENT, at_phent),
@@ -122,20 +127,25 @@ pub unsafe fn build_musl_stack(
         (AT_NULL, 0),
     ];
 
+    // Generate 16 bytes for AT_RANDOM (Linux kernel standard)
+    // Musl's __init_ssp uses first sizeof(uintptr_t) bytes for stack canary
+
     let entropy = [stack_top as u64, 0xdeadbeef_cafebabe_u64];
     let (random_low, random_high) = generate_random_bytes(&entropy);
 
+    // Memory layout after pushes (stack grows downward, lower addresses at bottom):
+
     #[cfg(target_pointer_width = "32")]
     {
-        ds.push((random_high >> 32) as usize); // High 32 bits of random_high
-        ds.push(random_high as usize); // Low 32 bits of random_high
-        ds.push((random_low >> 32) as usize); // High 32 bits of random_low
-        ds.push(random_low as usize); // Low 32 bits of random_low (musl reads from here)
+        ds.push((random_high >> 32) as usize);
+        ds.push(random_high as usize);
+        ds.push((random_low >> 32) as usize);
+        ds.push(random_low as usize);
     }
     #[cfg(target_pointer_width = "64")]
     {
         ds.push(random_high as usize);
-        ds.push(random_low as usize); // Musl reads from here
+        ds.push(random_low as usize);
     }
 
     let at_random_ptr = ds.sp();

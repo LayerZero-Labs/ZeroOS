@@ -1,5 +1,8 @@
 use crate::spec::{get_arch_spec, load_target_profile, parse_target_triple, LLVMConfig};
 
+///      --features "+m,+a,+c" --abi lp64 \
+///      --data-layout "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128" \
+
 #[derive(Debug, Clone, Default, clap::Args)]
 pub struct GenerateTargetArgs {
     #[arg(long)]
@@ -11,12 +14,14 @@ pub struct GenerateTargetArgs {
     #[arg(long)]
     pub llvm_target: Option<String>,
 
+    /// LLVM ABI (e.g., "lp64", "lp64d", "ilp32"). Can override profile defaults
     #[arg(long)]
     pub abi: Option<String>,
 
     #[arg(long)]
     pub features: Option<String>,
 
+    /// LLVM data layout string. Can override profile defaults
     #[arg(long)]
     pub data_layout: Option<String>,
 }

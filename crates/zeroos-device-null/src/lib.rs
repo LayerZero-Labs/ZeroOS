@@ -1,7 +1,7 @@
 #![no_std]
 
 use core::ptr::null_mut;
-use vfs::{noop_close, noop_ioctl, noop_seek, FdEntry, FileOps};
+use vfs_core::{noop_close, noop_ioctl, noop_seek, FdEntry, FileOps};
 
 fn null_read(_file: *mut u8, _buf: *mut u8, _count: usize) -> isize {
     0

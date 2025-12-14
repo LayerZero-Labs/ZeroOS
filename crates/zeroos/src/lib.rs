@@ -1,50 +1,59 @@
 #![no_std]
 
+zeroos_macros::require_at_most_one_feature!("alloc-linked-list", "alloc-buddy", "alloc-bump");
+zeroos_macros::require_at_most_one_feature!("scheduler-cooperative");
+
 pub use foundation;
 
-#[cfg(any(
-    feature = "alloc-linked-list",
-    feature = "alloc-buddy",
-    feature = "alloc-bump"
-))]
-pub use foundation::register_memory;
 pub use zeroos_macros as macros;
-
-#[cfg(feature = "vfs")]
-pub use foundation::register_vfs;
-
-#[cfg(feature = "random")]
-pub use foundation::register_random;
-
-#[cfg(feature = "scheduler")]
-pub use foundation::register_scheduler;
 
 #[cfg(feature = "arch-riscv")]
 pub extern crate arch_riscv;
 
+#[cfg(feature = "arch-riscv")]
+pub use arch_riscv::TrapFrame;
+
+#[cfg(feature = "os-linux")]
+extern crate os_linux;
+
 #[cfg(target_os = "none")]
-extern crate runtime_nostd;
+pub extern crate runtime_nostd;
 
 #[cfg(feature = "runtime-musl")]
-extern crate runtime_musl;
+pub extern crate runtime_musl;
 
 #[cfg(feature = "runtime-gnu")]
-extern crate runtime_gnu;
+pub extern crate runtime_gnu;
 
 #[cfg(feature = "libunwind")]
 extern crate libunwind;
 
-zeroos_macros::require_at_most_one_feature!("alloc-linked-list", "alloc-buddy", "alloc-bump");
-zeroos_macros::require_at_most_one_feature!("scheduler");
+#[cfg(feature = "memory")]
+pub use foundation::register_memory;
 
-pub mod arch {
-    #[cfg(feature = "arch-riscv")]
-    pub use arch_riscv as riscv;
-}
+#[cfg(feature = "vfs")]
+pub use foundation::register_vfs;
 
 #[cfg(feature = "scheduler")]
-pub mod scheduler {
-    pub use scheduler::*;
+pub use foundation::register_scheduler;
+
+#[cfg(feature = "random")]
+pub use foundation::register_random;
+
+pub mod arch {
+    #[cfg(all(
+        feature = "arch-riscv",
+        any(target_arch = "riscv32", target_arch = "riscv64")
+    ))]
+    pub mod riscv {
+        pub use arch_riscv::{boot, trap};
+
+        pub use arch_riscv::{
+            decode_trap, Exception, Trap, __bootstrap, _default_trap_handler, _start,
+        };
+
+        pub use arch_riscv::TrapFrame;
+    }
 }
 
 pub mod os {
@@ -54,9 +63,25 @@ pub mod os {
     }
 }
 
+pub mod runtime {
+    #[cfg(feature = "runtime-nostd")]
+    pub use runtime_nostd as nostd;
+
+    pub mod libc {
+        #[cfg(feature = "runtime-musl")]
+        pub use runtime_musl as musl;
+
+        #[cfg(feature = "runtime-gnu")]
+        pub use runtime_gnu as gnu;
+    }
+}
+
+#[cfg(target_os = "none")]
+pub use runtime_nostd::alloc;
+
 #[cfg(feature = "vfs")]
 pub mod vfs {
-    pub use vfs::*;
+    pub use vfs_core::*;
 
     pub mod devices {
         #[cfg(feature = "vfs-device-console")]
@@ -73,19 +98,16 @@ pub mod vfs {
     }
 }
 
+#[cfg(feature = "scheduler")]
+pub mod scheduler {
+    #[cfg(feature = "scheduler-cooperative")]
+    pub use scheduler_cooperative::*;
+}
+
 #[cfg(any(feature = "rng-lcg", feature = "rng-chacha"))]
 pub mod rng {
     pub use rng::*;
 }
-#[cfg(all(
-    target_os = "none",
-    any(
-        feature = "alloc-linked-list",
-        feature = "alloc-buddy",
-        feature = "alloc-bump"
-    )
-))]
-pub use runtime_nostd::alloc;
 
 pub fn initialize() {
     #[cfg(feature = "alloc-linked-list")]
@@ -97,18 +119,12 @@ pub fn initialize() {
     #[cfg(feature = "alloc-bump")]
     foundation::register_memory(allocator_bump::BUMP_ALLOCATOR_OPS);
 
-    #[cfg(feature = "scheduler")]
-    {
-        scheduler::Scheduler::init();
-        foundation::register_scheduler(scheduler::create_scheduler_ops());
-    }
-
     #[cfg(feature = "vfs")]
-    foundation::register_vfs(vfs::VFS_OPS);
+    foundation::register_vfs(vfs_core::VFS_OPS);
 
-    #[cfg(feature = "rng-lcg")]
-    foundation::register_random(rng::LCG_RNG_OPS);
+    #[cfg(feature = "scheduler-cooperative")]
+    foundation::register_scheduler(scheduler_cooperative::SCHEDULER_OPS);
 
-    #[cfg(feature = "rng-chacha")]
-    foundation::register_random(rng::CHACHA_RNG_OPS);
+    #[cfg(feature = "random")]
+    foundation::register_random(rng::RNG_OPS);
 }

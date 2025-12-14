@@ -1,7 +1,7 @@
 [package]
 name = "zeroos-allocator-linked-list"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "General-purpose linked list allocator for ZeroOS"
 
 [lib]

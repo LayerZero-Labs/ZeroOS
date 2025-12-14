@@ -1,39 +1,13 @@
-//! RISC-V boot sequence (RV32/RV64)
-//!
-//! ## Boot Modes
-//!
-//! ### With `std` feature (Linux/musl targets):
-//! - Builds musl-compatible stack with argc/argv/envp/auxv
-//! - Calls `__libc_start_main` which then calls user's `main`
-//!
-//! ### Without `std` feature (bare-metal/zkVM targets):
-//! - Uses boot stack directly (no musl stack building)
-//! - Calls user's `main` directly with zero argc/argv
-//!
-//! ## Entry Point
-//!
-//! By default, uses simple `main()` with no arguments:
-//! ```rust
-//! #[no_mangle]
-//! fn main() {
-//!     println!("Hello!");
-//! }
-//! ```
-//!
-//! With `libc-main` feature, uses C-style `main(argc, argv)`:
-//! ```c
-//! int main(int argc, char **argv) {
-//!     return 0;
-//! }
-//! ```
+use core::arch::naked_asm;
 
-use core::arch::{global_asm, naked_asm};
-
+/// # Safety
+/// Must only be entered by firmware/boot code in a valid reset context.
 #[unsafe(naked)]
 #[link_section = ".text.boot"]
 #[no_mangle]
 pub unsafe extern "C" fn _start() -> ! {
     naked_asm!(
+        // Initialize global pointer first (RISC-V ABI requirement)
         ".weak __global_pointer$",
         ".hidden __global_pointer$",
         ".option push",
@@ -55,15 +29,14 @@ pub unsafe extern "C" fn _start() -> ! {
     )
 }
 
+/// # Safety
+/// Must only be entered from `_start` during early boot.
 #[unsafe(naked)]
 #[no_mangle]
 pub unsafe extern "C" fn __bootstrap() -> ! {
     naked_asm!(
         "   call    {trace_bootstrap}",
-
         "   call    {platform_bootstrap}",
-
-        // Runtime environment initialization (never returns)
         "   tail    {runtime_bootstrap}",
 
         // Safety: If main() returns, halt forever.
@@ -80,15 +53,6 @@ pub unsafe extern "C" fn __bootstrap() -> ! {
         runtime_bootstrap = sym crate::__runtime_bootstrap,
     )
 }
-
-// Weak default platform bootstrap for no_std targets
-// Platforms can override this with their own implementation
-#[cfg(not(feature = "std"))]
-global_asm!(
-    ".weak __platform_bootstrap",
-    "__platform_bootstrap:",
-    "   ret",
-);
 
 #[no_mangle]
 extern "C" fn __boot_trace_start() {

@@ -5,6 +5,12 @@ pub struct LcgState {
     state: u64,
 }
 
+impl Default for LcgState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LcgState {
     #[inline]
     pub const fn new() -> Self {
@@ -42,21 +48,22 @@ impl LcgState {
 
 static GLOBAL_RNG: Mutex<LcgState> = Mutex::new(LcgState::new());
 
-pub fn fill_bytes(buf: *mut u8, len: usize) -> isize {
+/// # Safety
+/// - `buf` must be non-null and valid for writes of `len` bytes.
+/// - `buf` must not alias any other active mutable reference for the duration of this call.
+pub unsafe fn fill_bytes(buf: *mut u8, len: usize) -> isize {
     if buf.is_null() {
-        return -9; // EBADF
+        return -1;
     }
 
     let mut rng = GLOBAL_RNG.lock();
-    unsafe {
-        let slice = core::slice::from_raw_parts_mut(buf, len);
-        rng.fill_bytes(slice);
-    }
+    let slice = core::slice::from_raw_parts_mut(buf, len);
+    rng.fill_bytes(slice);
 
     len as isize
 }
 
-pub fn init_seed(seed: u64) {
+pub fn init(seed: u64) {
     let mut rng = GLOBAL_RNG.lock();
     *rng = LcgState::with_seed(seed);
 }

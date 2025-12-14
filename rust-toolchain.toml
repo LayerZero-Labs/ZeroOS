@@ -1,4 +1,8 @@
 [toolchain]
 channel = "1.90"
-targets = ["riscv64imac-unknown-none-elf"]
-components = ["rustfmt", "clippy", "rust-src"]
+targets = [
+  "riscv64imac-unknown-none-elf",
+  "riscv32imac-unknown-none-elf",
+  "riscv64gc-unknown-linux-musl",
+]
+components = ["clippy", "rustfmt", "rust-src"]

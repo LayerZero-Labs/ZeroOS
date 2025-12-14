@@ -1,7 +1,7 @@
 [package]
 name = "zeroos-arch-riscv"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "RISC-V architecture support for ZeroOS (riscv32 and riscv64)"
 
 [lib]
@@ -11,7 +11,7 @@ path = "src/lib.rs"
 [dependencies]
 riscv.workspace = true
 cfg-if.workspace = true
-foundation = { workspace = true, default-features = false }
+foundation = { workspace = true }
 debug.workspace = true
 memoffset.workspace = true
 zeroos-macros.workspace = true

@@ -1,8 +1,8 @@
-/// Declarative macros cannot compare identifiers for equality, so operands are
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __asm_dedup_operands {
     ([$($ops:tt)*]) => {
+
         $($ops)*
     };
 }
@@ -24,7 +24,6 @@ macro_rules! asm_block {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __asm_block_collect {
-
     (
         @strings []
         @auto_operands []
@@ -207,7 +206,6 @@ macro_rules! __asm_block_collect {
         }
     };
 
-
     (
         @strings [$($s:expr,)*]
         @auto_operands [$($auto:tt)*]
@@ -325,6 +323,7 @@ macro_rules! define_register_helpers {
                     )
                 }
             };
+
             ($r:ident, $f:ident @collector $state:tt) => {
                 paste::paste! {
                     ::zeroos_macros::__asm_block_collect!(
@@ -339,6 +338,7 @@ macro_rules! define_register_helpers {
                     )
                 }
             };
+
             ($r:ident, $f:ident, $base:ident @collector $state:tt) => {
                 paste::paste! {
                     ::zeroos_macros::__asm_block_collect!(
@@ -371,6 +371,7 @@ macro_rules! define_register_helpers {
                     )
                 }
             };
+
             ($r:ident, $f:ident @collector $state:tt) => {
                 paste::paste! {
                     ::zeroos_macros::__asm_block_collect!(
@@ -385,6 +386,7 @@ macro_rules! define_register_helpers {
                     )
                 }
             };
+
             ($r:ident, $f:ident, $base:ident @collector $state:tt) => {
                 paste::paste! {
                     ::zeroos_macros::__asm_block_collect!(

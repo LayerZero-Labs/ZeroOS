@@ -1,0 +1,250 @@
+commands:
+  check: >-
+    cargo check -q -p {package} --target "{target}" --no-default-features {features_flag}
+  clippy: >-
+    cargo clippy -q -p {package} --target "{target}" --no-default-features {features_flag} -- -D warnings
+  build: >-
+    cargo build -q -p {package} --target "{target}" --no-default-features {features_flag}
+  test: |-
+    set -e
+    if cargo test -q -p {package} --target "{target}" --no-default-features {features_flag} --no-run 2>/dev/null; then
+      :
+    else
+      cargo check -q -p {package} --target "{target}" --no-default-features {features_flag}
+    fi
+  fix: |-
+    set -e
+    cargo fix --allow-dirty --allow-staged -p {package} --target "{target}" --no-default-features {features_flag}
+    cargo clippy --fix --allow-dirty --allow-staged -p {package} --target "{target}" --no-default-features {features_flag}
+  fmt: >-
+    cargo fmt --quiet -p {package}
+
+host_targets: &host_targets
+  - host
+
+targets_none_elf_imac: &targets_none_elf_imac
+  - riscv64imac-unknown-none-elf
+  - riscv32imac-unknown-none-elf
+
+targets_linux_musl_gc: &targets_linux_musl_gc
+  - riscv64gc-unknown-linux-musl
+
+guest_targets: &guest_targets
+  - *targets_none_elf_imac
+  - *targets_linux_musl_gc
+
+entries:
+  - package: xtask
+    target: 
+      - *host_targets
+
+  - package: htif
+    target:
+      - *targets_none_elf_imac
+      - *targets_linux_musl_gc
+
+  - package: zeroos-build
+    target:
+      - *host_targets
+
+  - package: zeroos-debug
+    target:
+      - *host_targets
+      - *guest_targets
+
+  - package: zeroos-macros
+    target:
+      - *host_targets
+      - *guest_targets
+
+  - package: zeroos-foundation
+    target:
+      - *guest_targets
+    features:
+      - memory
+      - vfs
+      - scheduler
+      - random
+      - syscall
+
+  - package: zeroos-arch-riscv
+    target:
+      - *guest_targets
+
+  - package: zeroos-os-linux
+    target:
+      - *targets_linux_musl_gc
+    features:
+      - memory
+      - vfs
+      - scheduler
+      - random
+
+  - package: zeroos-runtime-nostd
+    target: 
+      - *targets_none_elf_imac
+    features:
+      - memory
+
+  - package: zeroos-runtime-musl
+    target:
+      - *targets_linux_musl_gc
+
+  - package: zeroos-runtime-gnu
+    target:
+      - *targets_linux_musl_gc
+
+  - package: zeroos-libunwind
+    target:
+      - *targets_linux_musl_gc
+
+  - package: zeroos-allocator-bump
+    target:
+      - *guest_targets
+
+  - package: zeroos-allocator-linked-list
+    target:
+      - *guest_targets
+
+  - package: zeroos-allocator-buddy
+    target:
+      - *guest_targets
+
+  - package: zeroos-vfs-core
+    target:
+      - *targets_linux_musl_gc
+
+  - package: zeroos-device-console
+    target:
+      - *targets_linux_musl_gc
+
+  - package: zeroos-device-null
+    target:
+      - *targets_linux_musl_gc
+
+  - package: zeroos-device-urandom
+    target:
+      - *targets_linux_musl_gc
+
+  - package: zeroos-device-zero
+    target:
+      - *targets_linux_musl_gc
+
+  - package: zeroos-scheduler-cooperative
+    target:
+      - *targets_linux_musl_gc
+    features:
+      - riscv
+
+  - package: zeroos-rng
+    target:
+      - *guest_targets
+    features:
+      - [lcg, chacha]
+
+  - package: zeroos
+    target:
+      - *targets_none_elf_imac
+    features:
+      - arch-riscv
+      - runtime-nostd
+      - memory
+      - [rng-lcg, rng-chacha]
+
+  - package: zeroos
+    target:
+      - *targets_linux_musl_gc
+    features:
+      - arch-riscv
+      - os-linux
+      - runtime-musl
+      - libunwind
+      - [alloc-linked-list, alloc-buddy, alloc-bump]
+      - vfs-device-console
+      - vfs-device-null
+      - vfs-device-zero
+      - vfs-device-urandom
+      - scheduler-cooperative
+      - [rng-lcg, rng-chacha]
+
+  - package: spike-build
+    target:
+      - *host_targets
+
+  - package: spike-platform
+    target:
+      - *targets_none_elf_imac
+    features:
+      - arch-riscv
+      - memory
+      - random
+
+  - package: spike-platform
+    target:
+      - *targets_linux_musl_gc
+    features:
+      - arch-riscv
+      - os-linux
+      - runtime-musl
+      - memory
+      - vfs-device-console
+      - thread
+      - random
+
+  - package: platform
+    target:
+      - *targets_none_elf_imac
+    features:
+      - with-spike
+      - memory
+      - random
+
+  - package: platform
+    target:
+      - *targets_linux_musl_gc
+    features:
+      - with-spike
+      - std
+      - os-linux
+      - runtime-musl
+      - libunwind
+      - memory
+      - vfs
+      - vfs-device-console
+      - thread
+
+  - package: fibonacci
+    target: riscv64imac-unknown-none-elf
+    commands:
+      build: >-
+        cargo spike build --package {package} --target "{target}" {features_flag} --quiet
+    features:
+      - with-spike
+
+  - package: fibonacci
+    target:
+      - *targets_linux_musl_gc
+    commands:
+      build: >-
+        cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std {features_flag} --quiet
+    features:
+      - with-spike
+      - std
+
+  - package: std-smoke
+    target:
+      - *targets_linux_musl_gc
+    commands:
+      build: >-
+        cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std {features_flag} --quiet
+    features:
+      - with-spike
+      - std
+
+  - package: c-staticlib
+    target:
+      - *targets_linux_musl_gc
+    commands:
+      build: >-
+        cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std {features_flag} --quiet
+

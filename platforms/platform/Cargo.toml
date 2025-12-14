@@ -1,8 +1,8 @@
 [package]
 name = "platform"
-version = "0.1.0"
-edition = "2024"
-description = "Platform abstraction facade for ZeroOS - selects and re-exports platform-specific implementations"
+version.workspace = true
+edition.workspace = true
+description.workspace = true
 
 [lib]
 crate-type = ["rlib"]
@@ -14,7 +14,7 @@ spike-platform = { workspace = true, optional = true }
 [features]
 default = []
 
-with-spike = ["spike-platform"]
+with-spike = ["spike-platform", "spike-platform?/arch-riscv"]
 
 debug = ["spike-platform?/debug"]
 bounds-checks = ["spike-platform?/bounds-checks"]
@@ -28,3 +28,5 @@ vfs = ["spike-platform?/vfs"]
 vfs-device-console = ["spike-platform?/vfs-device-console"]
 memory = ["spike-platform?/memory"]
 thread = ["spike-platform?/thread"]
+
+random = ["spike-platform?/random"]

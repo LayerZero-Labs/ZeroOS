@@ -2,6 +2,9 @@ use core::alloc::Layout;
 use core::ptr;
 use linked_list_allocator::LockedHeap;
 
+#[cfg(test)]
+extern crate alloc;
+
 pub(crate) static HEAP: LockedHeap = LockedHeap::empty();
 
 pub(crate) fn init(heap_start: usize, heap_size: usize) {
@@ -63,7 +66,7 @@ mod tests {
     #[test]
     fn test_alloc_dealloc() {
         const HEAP_SIZE: usize = 1024 * 1024;
-        let mut heap_mem = vec![0u8; HEAP_SIZE];
+        let mut heap_mem = alloc::vec![0u8; HEAP_SIZE];
         let heap_start = heap_mem.as_mut_ptr() as usize;
 
         init(heap_start, HEAP_SIZE);
@@ -78,7 +81,7 @@ mod tests {
     #[test]
     fn test_realloc() {
         const HEAP_SIZE: usize = 1024 * 1024;
-        let mut heap_mem = vec![0u8; HEAP_SIZE];
+        let mut heap_mem = alloc::vec![0u8; HEAP_SIZE];
         let heap_start = heap_mem.as_mut_ptr() as usize;
 
         init(heap_start, HEAP_SIZE);

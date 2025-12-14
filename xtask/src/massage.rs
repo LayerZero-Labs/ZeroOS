@@ -12,49 +12,28 @@ pub struct MassageArgs {
 }
 
 pub fn run(args: MassageArgs) -> Result<(), Box<dyn std::error::Error>> {
-    // Build target flags: either "--workspace" or per-package `-p` flags.
-    let target_flags = if args.workspace.workspace || args.workspace.package.is_empty() {
-        "--workspace".to_string()
+    let packages = if args.workspace.workspace || args.workspace.package.is_empty() {
+        Vec::new()
     } else {
-        args.workspace
-            .package
-            .iter()
-            .map(|p| format!("-p {p}"))
-            .collect::<Vec<_>>()
-            .join(" ")
+        args.workspace.package.clone()
     };
 
-    // Build the massage script using a template, then execute it with `sh!`.
-    let script = format!(
-        r#"
-set -e
+    let commands = ["fix", "fmt", "check", "test"];
+    for (i, cmd) in commands.iter().enumerate() {
+        println!(
+            "[massage {}/{}] matrix --command {}",
+            i + 1,
+            commands.len(),
+            cmd
+        );
+        crate::matrix::run(crate::matrix::MatrixArgs {
+            config: None,
+            command: Some((*cmd).to_string()),
+            packages: packages.clone(),
+            verbose: args.verbose,
+        })?;
+    }
 
-echo [1/5] Running cargo fix...
-cargo fix --allow-dirty --allow-staged --quiet {target_flags}
-
-echo [2/5] Running cargo clippy --fix...
-cargo clippy --fix --allow-dirty --allow-staged --quiet {target_flags}
-
-echo [3/5] Running cargo fmt...
-cargo fmt --all --quiet
-
-echo [4/5] Running cargo check...
-cargo check --quiet {target_flags}
-
-echo [5/5] Running cargo test...
-RUST_BACKTRACE=1 cargo nextest run --no-tests pass {target_flags}
-"#,
-        target_flags = target_flags
-    );
-
-    let opts = if args.verbose {
-        crate::sh::ShOptions::default()
-    } else {
-        crate::sh::ShOptions {
-            quiet: true,
-            ..Default::default()
-        }
-    };
-    crate::sh!(options(opts), script)?;
+    println!("[massage] done");
     Ok(())
 }

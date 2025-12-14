@@ -1,58 +1,70 @@
 #[inline]
-pub fn sched_yield() {
-    unsafe { (crate::KERNEL.scheduler.yield_now)() }
-}
-#[inline]
-pub fn current_tid() -> usize {
-    unsafe { (crate::KERNEL.scheduler.current_tid)() }
-}
-#[inline]
-pub fn thread_count() -> usize {
-    unsafe { (crate::KERNEL.scheduler.thread_count)() }
-}
-#[inline]
-pub fn exit_thread(code: i32) -> ! {
-    unsafe { (crate::KERNEL.scheduler.exit_thread)(code) }
+pub fn kinit() {
+    unsafe { (crate::KERNEL.scheduler.init)() }
 }
 
 #[inline]
-pub fn clone_thread(
-    flags: usize,
+pub fn spawn_thread(
     stack: usize,
-    parent_tid: usize,
-    child_tid: usize,
     tls: usize,
-    mepc: usize,
+    parent_tid_ptr: usize,
+    child_tid_ptr: usize,
+    clear_child_tid_ptr: usize,
+    pc: usize,
     frame_ptr: usize,
 ) -> isize {
     unsafe {
-        (crate::KERNEL.scheduler.clone_thread)(
-            flags, stack, parent_tid, child_tid, tls, mepc, frame_ptr,
+        (crate::KERNEL.scheduler.spawn_thread)(
+            stack,
+            tls,
+            parent_tid_ptr,
+            child_tid_ptr,
+            clear_child_tid_ptr,
+            pc,
+            frame_ptr,
         )
     }
 }
 
 #[inline]
-pub fn futex_wait(addr: usize, val: i32) -> isize {
-    unsafe { (crate::KERNEL.scheduler.futex_wait)(addr, val) }
+pub fn sched_yield() -> isize {
+    unsafe { (crate::KERNEL.scheduler.yield_now)() }
+}
+
+#[inline]
+pub fn exit_current(code: i32) -> isize {
+    unsafe { (crate::KERNEL.scheduler.exit_current)(code) }
+}
+
+#[inline]
+pub fn current_tid() -> usize {
+    unsafe { (crate::KERNEL.scheduler.current_tid)() }
+}
+
+#[inline]
+pub fn thread_count() -> usize {
+    unsafe { (crate::KERNEL.scheduler.thread_count)() }
+}
+
+#[inline]
+pub fn wait_on_addr(addr: usize, expected: i32) -> isize {
+    unsafe { (crate::KERNEL.scheduler.wait_on_addr)(addr, expected) }
 }
 #[inline]
-pub fn futex_wake(addr: usize, count: usize) -> usize {
-    unsafe { (crate::KERNEL.scheduler.futex_wake)(addr, count) }
+pub fn wake_on_addr(addr: usize, count: usize) -> usize {
+    unsafe { (crate::KERNEL.scheduler.wake_on_addr)(addr, count) }
+}
+
+#[inline]
+pub fn set_clear_on_exit_addr(addr: usize) -> isize {
+    unsafe { (crate::KERNEL.scheduler.set_clear_on_exit_addr)(addr) }
+}
+
+#[inline]
+pub fn update_frame(frame_ptr: usize, pc: usize) {
+    unsafe { (crate::KERNEL.scheduler.update_frame)(frame_ptr, pc) }
 }
 #[inline]
-pub fn get_current_a0() -> isize {
-    unsafe { (crate::KERNEL.scheduler.get_current_a0)() }
-}
-#[inline]
-pub fn update_frame(frame_ptr: usize, mepc: usize) {
-    unsafe { (crate::KERNEL.scheduler.update_frame)(frame_ptr, mepc) }
-}
-#[inline]
-pub fn finish_trap(frame_ptr: usize, mepc_ptr: usize, mepc: usize) {
-    unsafe { (crate::KERNEL.scheduler.finish_trap)(frame_ptr, mepc_ptr, mepc) }
-}
-#[inline]
-pub fn set_tid_address(tidptr: usize) -> usize {
-    unsafe { (crate::KERNEL.scheduler.set_tid_address)(tidptr) }
+pub fn finish_trap(frame_ptr: usize, pc_ptr: usize, pc: usize) {
+    unsafe { (crate::KERNEL.scheduler.finish_trap)(frame_ptr, pc_ptr, pc) }
 }

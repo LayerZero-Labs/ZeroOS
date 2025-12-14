@@ -7,14 +7,12 @@ use core::ops::{Deref, DerefMut};
 
 pub mod arch;
 pub mod entry;
-pub mod handlers;
 pub mod kfn;
 pub mod ops;
 pub mod syscall;
 pub mod utils;
 
-pub use arch::ArchContext;
-pub use handlers::{errno, HandlerContext, SyscallHandler};
+pub use arch::{ArchContext, FramePointerContext, SyscallFrame};
 
 pub use entry::__main_entry;
 
@@ -88,5 +86,12 @@ pub fn register_vfs(ops: ops::VfsOps) {
 pub fn register_random(ops: ops::RandomOps) {
     unsafe {
         KERNEL.random = ops;
+    }
+}
+
+#[cfg(feature = "memory")]
+pub fn init(heap_start: usize, heap_size: usize) {
+    unsafe {
+        (KERNEL.memory.init)(heap_start, heap_size);
     }
 }

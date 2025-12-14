@@ -1,7 +1,7 @@
 [package]
 name = "zeroos-allocator-buddy"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Buddy allocator with low fragmentation for ZeroOS"
 
 [lib]
@@ -11,3 +11,4 @@ crate-type = ["rlib"]
 
 [dependencies]
 foundation = { workspace = true, features = ["memory"] }
+buddy_system_allocator.workspace = true

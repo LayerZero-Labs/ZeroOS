@@ -1,2 +1,8 @@
 [alias]
 xtask = "run --package xtask --"
+massage = "run --package xtask -- massage"
+matrix = "run --package xtask -- matrix --command"
+act = "run --package xtask -- act"
+
+zeroos = "run -q -p zeroos-build --bin cargo-zeroos -- zeroos"
+spike = "run -q -p spike-build --bin cargo-spike -- spike"

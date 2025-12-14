@@ -1,17 +1,17 @@
 #![no_std]
 
-use vfs::{noop_close, noop_ioctl, noop_seek, FileOps, EBADF};
+use vfs_core::{noop_close, noop_ioctl, noop_seek, FileOps};
 
 fn console_read_eof(_file: *mut u8, _buf: *mut u8, _count: usize) -> isize {
-    0 // EOF
+    0
 }
 
 fn console_read_unsupported(_file: *mut u8, _buf: *mut u8, _count: usize) -> isize {
-    EBADF
+    -(libc::EBADF as isize)
 }
 
 fn console_write_unsupported(_file: *mut u8, _buf: *const u8, _count: usize) -> isize {
-    EBADF
+    -(libc::EBADF as isize)
 }
 
 pub const fn read_only_fops(read_fn: Option<fn(*mut u8, *mut u8, usize) -> isize>) -> FileOps {

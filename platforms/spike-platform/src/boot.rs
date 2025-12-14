@@ -1,3 +1,5 @@
+extern crate alloc;
+
 #[allow(unused_imports)]
 pub use htif::{fromhost, tohost};
 
@@ -8,40 +10,68 @@ extern "C" {
     static __stack_bottom: u8;
 }
 
+#[inline(always)]
+#[cfg(feature = "os-linux")]
+fn install_trap_vector() {
+    #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+    unsafe {
+        core::arch::asm!("la      t0, _trap_handler", "csrw    mtvec, t0",);
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn __platform_bootstrap() {
     debug::writeln!("[BOOT] __platform_bootstrap");
 
     zeroos::initialize();
 
-    unsafe {
-        #[cfg(feature = "memory")]
-        {
-            let heap_start = core::ptr::addr_of!(__heap_start) as usize;
-            let heap_end = core::ptr::addr_of!(__heap_end) as usize;
-            debug::writeln!("[BOOT] Heap start=0x{:x}, end=0x{:x}", heap_start, heap_end);
-            let heap_size = heap_end - heap_start;
+    #[cfg(feature = "memory")]
+    {
+        let heap_start = core::ptr::addr_of!(__heap_start) as usize;
+        let heap_end = core::ptr::addr_of!(__heap_end) as usize;
+        debug::writeln!("[BOOT] Heap start=0x{:x}, end=0x{:x}", heap_start, heap_end);
+        let heap_size = heap_end - heap_start;
+        foundation::kfn::memory::kinit(heap_start, heap_size);
 
-            foundation::kfn::memory::kinit(heap_start, heap_size);
-        }
+        let _stack_top = core::ptr::addr_of!(__stack_top) as usize;
+        let _stack_bottom = core::ptr::addr_of!(__stack_bottom) as usize;
+        debug::writeln!(
+            "[BOOT] Stack top=0x{:x}, bottom=0x{:x}",
+            _stack_top,
+            _stack_bottom
+        );
+    }
 
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "std")] {
-                core::arch::asm!("la      t0, _trap_handler", "csrw    mtvec, t0",);
+    cfg_if::cfg_if! {
+        if #[cfg(not(target_os = "none"))] {
+            #[cfg(feature = "os-linux")]
+            {
+                install_trap_vector();
                 debug::writeln!("[BOOT] Trap handler installed");
+            }
 
+            #[cfg(feature = "thread")]
+            {
+                foundation::kfn::scheduler::kinit();
+            }
 
-                #[cfg(feature = "vfs")]
+            #[cfg(feature = "vfs")]
+            {
+                foundation::kfn::vfs::kinit();
+
+                #[cfg(feature = "vfs-device-console")]
                 {
-
-                    #[cfg(feature = "vfs-device-console")]
-                    {
-                        debug::writeln!("[BOOT] Registering console file descriptors");
-                        register_console_fd(1, &STDOUT_FOPS);
-                        register_console_fd(2, &STDERR_FOPS);
-                    }
+                    debug::writeln!("[BOOT] Registering console file descriptors");
+                    register_console_fd(1, &STDOUT_FOPS);
+                    register_console_fd(2, &STDERR_FOPS);
                 }
+            }
 
+            #[cfg(feature = "random")]
+            {
+                // SECURITY: RNG seed is fixed (0) for deterministic runs (e.g. sims/tests).
+                // Please Replace with a proper seed source for production/real entropy use.
+                foundation::kfn::random::kinit(0);
             }
         }
     }
@@ -73,9 +103,7 @@ cfg_if::cfg_if! {
             );
         }
 
-        static STDOUT_FOPS: vfs::FileOps =
-        vfs::devices::console::stdout_fops(htif_console_write);
-        static STDERR_FOPS: vfs::FileOps =
-        vfs::devices::console::stderr_fops(htif_console_write);
+        static STDOUT_FOPS: vfs::FileOps = vfs::devices::console::stdout_fops(htif_console_write);
+        static STDERR_FOPS: vfs::FileOps = vfs::devices::console::stderr_fops(htif_console_write);
     }
 }

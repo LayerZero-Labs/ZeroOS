@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone)]
 pub struct ToolchainPaths {
     pub musl_lib: PathBuf,
+
     pub gcc_lib: PathBuf,
 }
 
@@ -25,8 +26,9 @@ pub fn discover_toolchain(arch: &str) -> Option<ToolchainPaths> {
         }
     }
 
+    // Add user home directories (prioritized for safety and no sudo)
     if let Some(home) = dirs::home_dir() {
-        search_dirs.push(home.join(".bolt/musl"));
+        search_dirs.push(home.join(".zeroos/musl"));
 
         search_dirs.push(home.join(".local"));
     }
@@ -101,8 +103,7 @@ fn try_find_gcc_version(gcc_base: &Path) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
+    #![allow(unused_imports)]
     #[test]
     fn test_discover_respects_env_var() {}
 }

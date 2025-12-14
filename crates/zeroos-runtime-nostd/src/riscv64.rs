@@ -4,7 +4,8 @@ extern "C" {
     fn __main_entry(argc: i32, argv: *const *const u8, envp: *const *const u8) -> i32;
 }
 
-/// Never returns - __main_entry calls user's main() which should call exit().
+/// # Safety
+/// Must only be entered by early boot code.
 #[unsafe(naked)]
 #[no_mangle]
 pub unsafe extern "C" fn __runtime_bootstrap() -> ! {
@@ -12,7 +13,7 @@ pub unsafe extern "C" fn __runtime_bootstrap() -> ! {
         "   li      a0, 0",           // argc = 0
         "   li      a1, 0",           // argv = NULL
         "   li      a2, 0",           // envp = NULL
-        "   tail    {main_entry}",   // tail call to __main_entry (never returns)
+        "   tail    {main_entry}",    // tail call to __main_entry
 
         main_entry = sym __main_entry,
     )

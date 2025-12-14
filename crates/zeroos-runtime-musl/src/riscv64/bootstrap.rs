@@ -29,25 +29,8 @@ extern "C" fn __boot_trace_runtime() {
     debug::writeln!("[BOOT] __runtime_bootstrap");
 }
 
-#[no_mangle]
-extern "C" fn __boot_trace_switched(sp: usize) {
-    debug::writeln!(
-        "[BOOT] Switched to musl stack, SP=0x{:x} aligned={}",
-        sp,
-        sp % 16 == 0
-    );
-}
-
-#[no_mangle]
-extern "C" fn __boot_trace_argc(argc: usize) {
-    debug::writeln!("[BOOT] argc={}", argc);
-}
-
-#[no_mangle]
-extern "C" fn __boot_trace_before_musl() {
-    debug::writeln!("[BOOT] __libc_start_main");
-}
-
+// SAFETY: `MUSL_BUILD_BUFFER` must be large enough for `build_musl_stack` output.
+// adjust `MUSL_BUFFER_SIZE` if musl stack layout grows.
 const MUSL_BUFFER_SIZE: usize = 512;
 const MUSL_BUFFER_BYTES: usize = MUSL_BUFFER_SIZE * core::mem::size_of::<usize>();
 
@@ -70,37 +53,34 @@ unsafe fn build_musl_in_buffer() -> usize {
 
     size
 }
-/// - Never returns: Tail-calls into musl's __libc_start_main
+
+/// # Safety
+/// Must only be entered by early boot code.
 #[unsafe(naked)]
 #[no_mangle]
 pub unsafe extern "C" fn __runtime_bootstrap() -> ! {
     naked_asm!(
         "   call    {trace_runtime}",
-
         "   call    {build_impl}",
-
-        "   mv      t2, a0",             // t2 = size to copy
-
-        "   la      t0, {buffer}",       // t0 = buffer start
-        "   li      t1, {buffer_bytes}", // t1 = buffer size in bytes
-        "   add     t0, t0, t1",         // t0 = buffer_top
-        "   sub     t6, t0, t2",         // t6 = buffer_top - size = src
-
-        "   addi    sp, sp, -512",         // HACK: sp = sp - 512
-        "   sub     t3, sp, t2",         // t3 = sp - size = dst (new SP)
-        "   mv      t5, t3",             // t5 = save new SP for later
+        "   mv      t2, a0",
+        "   la      t0, {buffer}",
+        "   li      t1, {buffer_bytes}",
+        "   add     t0, t0, t1",
+        "   sub     t6, t0, t2",
+        "   addi    sp, sp, -512",
+        "   sub     t3, sp, t2",
+        "   mv      t5, t3",
 
         "1:",
-        "   beqz    t2, 2f",             // if size == 0, done
-        "   ld      t1, 0(t6)",          // load 8 bytes from src
-        "   sd      t1, 0(t3)",          // store 8 bytes to dst
-        "   addi    t6, t6, 8",          // src += 8
-        "   addi    t3, t3, 8",          // dst += 8
-        "   addi    t2, t2, -8",         // size -= 8
-        "   j       1b",                 // loop
+        "   beqz    t2, 2f",
+        "   ld      t1, 0(t6)",
+        "   sd      t1, 0(t3)",
+        "   addi    t6, t6, 8",
+        "   addi    t3, t3, 8",
+        "   addi    t2, t2, -8",
+        "   j       1b",
         "2:",
-
-        "   mv      sp, t5",             // sp = new SP (start of copied stack)
+        "   mv      sp, t5",
 
         "   la      a0, {main}",         // a0 = main function
         "   ld      a1, 0(sp)",          // a1 = argc (int, 64-bit)
@@ -108,8 +88,8 @@ pub unsafe extern "C" fn __runtime_bootstrap() -> ! {
         "   la      a3, {init}",         // a3 = _init
         "   la      a4, {fini}",         // a4 = _fini
         "   li      a5, 0",              // a5 = NULL (ldso_dummy)
+        "   li      a5, 0",
 
-        // Tail call __libc_start_main (never returns)
         "   tail    {libc_start_main}",
 
         trace_runtime = sym __boot_trace_runtime,

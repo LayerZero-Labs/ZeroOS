@@ -6,6 +6,12 @@ pub struct ChaChaState {
     counter: u64,
 }
 
+impl Default for ChaChaState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChaChaState {
     #[inline]
     pub const fn new() -> Self {
@@ -14,10 +20,10 @@ impl ChaChaState {
 
     pub const fn with_seed(seed: u64) -> Self {
         let mut state = [0u32; 16];
-        state[0] = 0x61707865; // "expa"
-        state[1] = 0x3320646e; // "nd 3"
-        state[2] = 0x79622d32; // "2-by"
-        state[3] = 0x6b206574; // "te k"
+        state[0] = 0x61707865;
+        state[1] = 0x3320646e;
+        state[2] = 0x79622d32;
+        state[3] = 0x6b206574;
 
         state[4] = (seed & 0xFFFFFFFF) as u32;
         state[5] = (seed >> 32) as u32;
@@ -74,8 +80,8 @@ impl ChaChaState {
             Self::quarter_round(&mut working_state, 3, 4, 9, 14);
         }
 
-        for i in 0..16 {
-            working_state[i] = working_state[i].wrapping_add(self.state[i]);
+        for (word, addend) in working_state.iter_mut().zip(self.state.iter()) {
+            *word = (*word).wrapping_add(*addend);
         }
 
         for (i, &word) in working_state.iter().enumerate() {
@@ -100,21 +106,22 @@ impl ChaChaState {
 
 static GLOBAL_RNG: Mutex<ChaChaState> = Mutex::new(ChaChaState::new());
 
-pub fn fill_bytes(buf: *mut u8, len: usize) -> isize {
+/// # Safety
+/// - `buf` must be non-null and valid for writes of `len` bytes.
+/// - `buf` must not alias any other active mutable reference for the duration of this call.
+pub unsafe fn fill_bytes(buf: *mut u8, len: usize) -> isize {
     if buf.is_null() {
-        return -9; // EBADF
+        return -1;
     }
 
     let mut rng = GLOBAL_RNG.lock();
-    unsafe {
-        let slice = core::slice::from_raw_parts_mut(buf, len);
-        rng.fill_bytes(slice);
-    }
+    let slice = core::slice::from_raw_parts_mut(buf, len);
+    rng.fill_bytes(slice);
 
     len as isize
 }
 
-pub fn init_seed(seed: u64) {
+pub fn init(seed: u64) {
     let mut rng = GLOBAL_RNG.lock();
     *rng = ChaChaState::with_seed(seed);
 }

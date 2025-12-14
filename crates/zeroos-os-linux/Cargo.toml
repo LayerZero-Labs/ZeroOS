@@ -1,7 +1,7 @@
 [package]
 name = "zeroos-os-linux"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Linux syscall number mappings for ZeroOS"
 
 [lib]
@@ -9,14 +9,11 @@ name = "zeroos_os_linux"
 path = "src/lib.rs"
 
 [dependencies]
-foundation = { workspace = true, default-features = false }
+foundation = { workspace = true }
 cfg-if.workspace = true
 libc.workspace = true
-arch-riscv = { workspace = true }
 
 [features]
-default = ["trap"]
-trap = ["foundation/trap"]
 memory = ["foundation/memory"]
 scheduler = ["foundation/scheduler"]
 vfs = ["foundation/vfs"]

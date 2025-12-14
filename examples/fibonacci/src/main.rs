@@ -5,16 +5,14 @@ use fibonacci::fibonacci;
 
 cfg_if::cfg_if! {
     if #[cfg(target_os = "none")] {
+
         use platform::println;
     } else {
-        use std::println;
 
-        #[allow(unused_imports)]
-        use platform;
+        use std::println;
     }
 }
 
-/// Never returns - call exit() to terminate.
 #[no_mangle]
 fn main() -> ! {
     debug::writeln!("[BOOT] main");

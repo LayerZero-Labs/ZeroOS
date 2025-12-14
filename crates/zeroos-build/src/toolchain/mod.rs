@@ -5,7 +5,7 @@ mod discovery;
 pub use discovery::{discover_toolchain, validate_toolchain_path, ToolchainPaths};
 
 use std::format;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::string::{String, ToString};
 
 use tracing::{debug, info};
@@ -13,6 +13,7 @@ use tracing::{debug, info};
 #[derive(Debug, Clone)]
 pub struct ToolchainConfig {
     pub arch: String,
+
     pub search_dirs: Vec<PathBuf>,
 }
 
@@ -81,7 +82,7 @@ pub fn resolve_toolchain_paths(
         .ok_or_else(|| format!("Toolchain not found for architecture: {}", config.arch))
 }
 
-fn validate_musl_lib(musl_lib: &PathBuf) -> std::result::Result<(), std::string::String> {
+fn validate_musl_lib(musl_lib: &Path) -> std::result::Result<(), std::string::String> {
     if !musl_lib.join("libc.a").exists() {
         return Err(format!(
             "Invalid musl lib path: libc.a not found in {}",
@@ -91,7 +92,7 @@ fn validate_musl_lib(musl_lib: &PathBuf) -> std::result::Result<(), std::string:
     Ok(())
 }
 
-fn validate_gcc_lib(gcc_lib: &PathBuf) -> std::result::Result<(), std::string::String> {
+fn validate_gcc_lib(gcc_lib: &Path) -> std::result::Result<(), std::string::String> {
     if !gcc_lib.join("libgcc.a").exists() {
         return Err(format!(
             "Invalid gcc lib path: libgcc.a not found in {}",
@@ -101,7 +102,7 @@ fn validate_gcc_lib(gcc_lib: &PathBuf) -> std::result::Result<(), std::string::S
     Ok(())
 }
 
-fn find_gcc_version_dir(gcc_base: &PathBuf) -> std::result::Result<PathBuf, std::string::String> {
+fn find_gcc_version_dir(gcc_base: &Path) -> std::result::Result<PathBuf, std::string::String> {
     if !gcc_base.exists() {
         return Err(format!(
             "GCC base directory not found: {}",
@@ -128,15 +129,18 @@ fn find_gcc_version_dir(gcc_base: &PathBuf) -> std::result::Result<PathBuf, std:
 #[derive(Debug, Clone)]
 pub struct BuildConfig {
     pub arch: String,
+
     pub output_dir: String,
+    /// GCC configuration flags (e.g., "--with-arch=rv64ima --with-abi=lp64")
     pub gcc_config: Option<String>,
+
     pub jobs: Option<usize>,
 }
 
 impl Default for BuildConfig {
     fn default() -> Self {
         let output_dir = dirs::home_dir()
-            .map(|home| home.join(".bolt/musl").to_string_lossy().to_string())
+            .map(|home| home.join(".zeroos/musl").to_string_lossy().to_string())
             .unwrap_or_else(|| "/usr/local".to_string());
 
         Self {
@@ -156,7 +160,7 @@ pub fn build_musl_toolchain(
     use std::process::{Command, Stdio};
 
     let temp_dir = tempfile::Builder::new()
-        .prefix(&format!("bolt-musl-build-{}-", config.arch))
+        .prefix(&format!("zeroos-musl-build-{}-", config.arch))
         .tempdir()
         .map_err(|e| format!("Failed to create temp directory: {}", e))?;
     let temp_dir_path = temp_dir.path().to_path_buf();

@@ -1,4 +1,7 @@
+mod act;
+mod findup;
 mod massage;
+mod matrix;
 mod sh;
 
 use clap::{Parser, Subcommand};
@@ -17,17 +20,25 @@ struct Cli {
 enum Command {
     /// Run the 'massage' task
     Massage(massage::MassageArgs),
+    /// Run a curated matrix of cargo commands (targets/features) from config
+    Matrix(matrix::MatrixArgs),
+    /// Run GitHub Actions locally via `act` (forwards all args to the `act` CLI)
+    Act(act::ActArgs),
+}
+
+fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
+    match cli.command {
+        Command::Massage(args) => massage::run(args),
+        Command::Matrix(args) => matrix::run(args),
+        Command::Act(args) => act::run(args),
+    }
 }
 
 fn main() {
     let cli = Cli::parse();
 
-    match cli.command {
-        Command::Massage(args) => {
-            if let Err(e) = massage::run(args) {
-                eprintln!("Error: {}", e);
-                std::process::exit(1);
-            }
-        }
+    if let Err(e) = run(cli) {
+        eprintln!("{e}");
+        std::process::exit(1);
     }
 }

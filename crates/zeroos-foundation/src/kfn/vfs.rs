@@ -1,4 +1,9 @@
 #[inline]
+pub fn kinit() {
+    unsafe { (crate::KERNEL.vfs.init)() }
+}
+
+#[inline]
 pub fn kread(fd: i32, buf: *mut u8, count: usize) -> isize {
     unsafe { (crate::KERNEL.vfs.read)(fd, buf, count) }
 }
@@ -9,8 +14,10 @@ pub fn kwrite(fd: i32, buf: *const u8, count: usize) -> isize {
 }
 
 #[inline]
-pub fn kopen(path: *const u8, flags: i32, mode: u32) -> isize {
-    unsafe { (crate::KERNEL.vfs.open)(path, flags, mode) }
+/// # Safety
+/// `path` must be a valid NUL-terminated string.
+pub unsafe fn kopen(path: *const u8, flags: i32, mode: u32) -> isize {
+    (crate::KERNEL.vfs.open)(path, flags, mode)
 }
 
 #[inline]

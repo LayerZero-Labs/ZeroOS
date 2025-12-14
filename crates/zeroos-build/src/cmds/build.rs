@@ -31,6 +31,9 @@ pub struct BuildArgs {
     pub mode: StdMode,
 
     #[arg(long)]
+    pub target: Option<String>,
+
+    #[arg(long)]
     pub fully: bool,
 
     #[arg(long, env = "RISCV_MUSL_PATH")]
@@ -51,6 +54,7 @@ pub fn build_binary(
     workspace_root: &PathBuf,
     args: &BuildArgs,
     toolchain_paths: Option<(PathBuf, PathBuf)>,
+    linker_template: Option<String>,
 ) -> Result<()> {
     info!(
         "Building binary for {:?} mode (fully: {})",
@@ -68,15 +72,16 @@ pub fn build_binary(
     debug!("stack_size: 0x{:x} ({} bytes)", stack_size, stack_size);
     debug!("heap_size: 0x{:x} ({} bytes)", heap_size, heap_size);
 
-    let target = match args.mode {
+    let default_target = match args.mode {
         StdMode::Std => TARGET_STD,
         StdMode::NoStd => TARGET_NO_STD,
     };
+    let target = args.target.as_deref().unwrap_or(default_target);
 
     let build_std_arg = match (args.mode, args.fully) {
         (StdMode::Std, _) => Some("-Zbuild-std=core,alloc,std,panic_abort"),
         (StdMode::NoStd, true) => Some("-Zbuild-std=core,alloc,panic_abort"),
-        (StdMode::NoStd, false) => None, // Use pre-built std
+        (StdMode::NoStd, false) => None,
     };
 
     debug!("target: {}", target);
@@ -100,14 +105,20 @@ pub fn build_binary(
         .with_stack_size(stack_size)
         .with_heap_size(heap_size);
 
+    let config = if let Some(template) = linker_template {
+        config.with_template(template)
+    } else {
+        config
+    };
+
     write_linker_script(&linker_script_path, config)?;
 
-    // For std mode, RUST_TARGET_PATH must be set
+    // For std mode with the built-in target profile, RUST_TARGET_PATH must be set.
     let rust_target_path = std::env::var("RUST_TARGET_PATH")
         .ok()
         .map(PathBuf::from)
         .or_else(|| {
-            if args.mode == StdMode::Std {
+            if args.mode == StdMode::Std && target == TARGET_STD {
                 let target_spec_path = crate_out_dir.join(format!("{}.json", target));
                 write_target_spec(target_spec_path, target).ok();
                 Some(crate_out_dir.clone())
@@ -118,7 +129,6 @@ pub fn build_binary(
 
     let mut link_args = vec![
         format!("-T{}", linker_script_path.display()),
-        // This prevents deadlocks in stdio when using std::println! without pthread_create
         "--wrap=__lock".to_string(),
         "--wrap=__unlock".to_string(),
         "--wrap=__lockfile".to_string(),
@@ -220,7 +230,7 @@ fn write_linker_script(
 ) -> Result<(), anyhow::Error> {
     let path = linker_script_path.as_ref();
     debug!("Generating linker script: {}", path.display());
-    let script_content = config.render();
+    let script_content = config.render(None);
     fs::write(path, script_content)?;
     debug!("Linker script written successfully");
     Ok(())
@@ -244,7 +254,7 @@ pub fn get_or_build_toolchain(
                 eprintln!("RISC-V musl toolchain not found: {}", e);
                 eprintln!();
                 eprintln!("Building toolchain (this will take 5-15 minutes)...");
-                eprintln!("Output: ~/.bolt/musl");
+                eprintln!("Output: ~/.zeroos/musl");
                 eprintln!();
 
                 let build_config = BuildConfig::default();
@@ -259,12 +269,12 @@ pub fn get_or_build_toolchain(
                 eprintln!("Error: RISC-V musl toolchain not found: {}", e);
                 eprintln!();
                 eprintln!("To build the toolchain:");
-                eprintln!("  cargo bolt build-musl");
+                eprintln!("  cargo zeroos build-musl");
                 eprintln!();
                 eprintln!("Or use --fully to build automatically:");
-                eprintln!("  cargo bolt build --fully");
+                eprintln!("  cargo zeroos build --fully");
                 eprintln!();
-                eprintln!("This installs to ~/.bolt/musl by default (no sudo required).");
+                eprintln!("This installs to ~/.zeroos/musl by default (no sudo required).");
                 anyhow::bail!("Toolchain not found");
             }
         }
@@ -281,4 +291,5 @@ pub fn parse_address(s: &str) -> Result<usize> {
 }
 
 use crate::cmds::GenerateTargetArgs;
+
 pub use crate::project::find_workspace_root;

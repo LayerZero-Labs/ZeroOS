@@ -1,10 +1,11 @@
 [package]
 name = "zeroos-device-null"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-vfs = { workspace = true }
+libc = { workspace = true }
+vfs-core = { workspace = true }
 
 [features]
 default = []

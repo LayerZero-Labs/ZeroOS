@@ -1,7 +1,7 @@
 [package]
 name = "zeroos-foundation"
 version = "0.3.0"
-edition = "2021"
+edition.workspace = true
 description = "ZeroOS foundation layer - the bedrock runtime, registry, and coordination that everything builds upon"
 
 [lib]
@@ -24,7 +24,6 @@ memory = []
 scheduler = []
 syscall = []
 vfs = []
-trap = []
 random = []
 
 # Boot mode selection

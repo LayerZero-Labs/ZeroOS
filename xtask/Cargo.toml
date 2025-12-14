@@ -1,10 +1,13 @@
 [package]
 name = "xtask"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-clap = { version = "4.5.4", features = ["derive"] }
-clap-cargo = "0.18"
-log = "0.4"
-derive_builder = "0.20.0"
+clap = { workspace = true, features = ["derive"] }
+clap-cargo.workspace = true
+log.workspace = true
+derive_builder.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+serde_json.workspace = true

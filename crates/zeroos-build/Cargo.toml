@@ -1,14 +1,14 @@
 [package]
 name = "zeroos-build"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 description = "Build tooling and CLI for ZeroOS"
 
 [lib]
 path = "src/lib.rs"
 
 [[bin]]
-name = "cargo-bolt"
+name = "cargo-zeroos"
 path = "src/main.rs"
 
 [dependencies]

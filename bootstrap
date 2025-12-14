@@ -4,8 +4,7 @@ set -eu -o pipefail
 
 TARGET_OS=""
 
-readonly DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-readonly ROOT="$DIR/"
+readonly ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd))"
 readonly TMPDIR=${TMPDIR:-/tmp}
 
 readonly RISCV_DIR="$HOME/.local/riscv"
@@ -46,10 +45,15 @@ affirm() {
 
 # Run a command with sudo if not already root.
 elevate() {
+	if [ $# -ne 1 ]; then
+		err "elevate expects a single command string argument"
+		return 1
+	fi
+	local cmd="$1"
 	if [ "${TARGET_OS:-}" = "macos" ] || [ "$(id -u)" -eq 0 ]; then
-		bash -c "$*"
+		bash -c "$cmd"
 	else
-		sudo bash -c "$*"
+		sudo bash -c "$cmd"
 	fi
 }
 
@@ -81,7 +85,7 @@ get_rcfile_path() {
 	*/zsh) profile_path="${ZDOTDIR:-$HOME}/.zshrc" ;;
 	*/bash) profile_path="$HOME/.bashrc" ;;
 	*)
-		err "Could not detect current shell ($current_shell). Only zsh and bash are supported for rc configuration."
+		err "Could not detect current shell ($SHELL). Only zsh and bash are supported for rc configuration."
 		return 1
 		;;
 	esac
@@ -101,7 +105,8 @@ install_pkg() {
 			err "This script currently supports only Debian/Ubuntu-style systems (requires apt-get)."
 			exit 1
 		fi
-		elevate "apt-get update && apt-get install -y --no-install-recommends $@"
+		# Use $* (not $@) so this expands to a single string argument for elevate().
+		elevate "apt-get update && apt-get install -y --no-install-recommends $*"
 		;;
 	macos)
 		brew install "$@"
@@ -134,7 +139,7 @@ install_zsh_plugin() {
 setup_base_packages() {
 	case "$TARGET_OS" in
 	linux)
-		install_pkg ca-certificates vim.tiny build-essential gh pkg-config libssl-dev fzf direnv
+		install_pkg ca-certificates curl git sudo vim.tiny build-essential gh pkg-config libssl-dev fzf direnv
 		elevate "update-alternatives --install /usr/bin/vim vim /usr/bin/vim.tiny 10"
 		;;
 	macos)
@@ -155,6 +160,9 @@ setup_direnv() {
 	envrc_file=$(get_envrc_path)
 	log "Creating project .envrc at $envrc_file"
 	touch "$envrc_file"
+
+	# Keep rustup from printing update/component check noise on every cargo invocation.
+	affirm 'export RUSTUP_NO_UPDATE_CHECK=1' "$envrc_file" "Disabling rustup update checks for this repo"
 }
 
 setup_zsh() {
@@ -172,31 +180,12 @@ setup_zsh() {
 	log "Installing Zsh plugins..."
 	install_zsh_plugin "https://github.com/zsh-users/zsh-autosuggestions" "$ZSH_CUSTOM_DIR/plugins/zsh-autosuggestions"
 	install_zsh_plugin "https://github.com/zsh-users/zsh-completions" "$ZSH_CUSTOM_DIR/plugins/zsh-completions"
-	install_zsh_plugin "https://github.com/romkatv/powerlevel10k" "$ZSH_CUSTOM_DIR/themes/powerlevel10k"
-	cp $HOME/.oh-my-zsh/custom/themes/powerlevel10k/config/p10k-lean.zsh $HOME/.p10k.zsh
 
 	touch "$HOME/.zshrc"
-	log "Configuring Zsh plugins and theme (with Cursor IDE support)..."
+	log "Configuring Zsh plugins..."
 
-	# Configure plugins and theme with Cursor IDE compatibility
-	sedi 's/^plugins.*)/plugins=(z fzf git zsh-autosuggestions zsh-completions)/' "$HOME/.zshrc"
-
-	# Use raw sed for complex ZSH_THEME block replacement with stdin trick
-	sedi -e '/^ZSH_THEME=.*/{
-r /dev/stdin
-d
-}' "$HOME/.zshrc" <<'EOF'
-if [[ "$PAGER" == *"head -n 10000 | cat"* || "$COMPOSER_NO_INTERACTION" == "1" ]]; then
-  ZSH_THEME="robbyrussell"
-else
-  ZSH_THEME="powerlevel10k/powerlevel10k"
-fi
-EOF
-
-	# Configure powerlevel10k settings
-	affirm 'typeset -g POWERLEVEL9K_RIGHT_PROMPT_ELEMENTS=()' "$HOME/.p10k.zsh"
-	affirm 'typeset -g POWERLEVEL9K_TRANSIENT_PROMPT=always' "$HOME/.p10k.zsh"
-	affirm 'if [[ -f $HOME/.p10k.zsh ]]; then source $HOME/.p10k.zsh; fi' "$HOME/.zshrc"
+	# Configure plugins
+	sedi 's/^plugins.*)/plugins=(git fzf zsh-autosuggestions zsh-completions)/' "$HOME/.zshrc"
 
 	# Fix locale issues (https://github.com/ohmyzsh/ohmyzsh/issues/7426)
 	affirm 'export LANG=en_US.UTF-8' "$HOME/.zshrc"
@@ -238,20 +227,11 @@ setup_git_hooks() {
 	# git config --local core.hooksPath ".ghk"
 }
 
-setup_cursor() {
-	log "Linking .cursor IDE rules..."
-	if [[ -d third-party/IDEalRules/.cursor ]]; then
-		ln -sf third-party/IDEalRules/.cursor .cursor
-	fi
-}
-
 setup_rust() {
-	if !command -v rustup >/dev/null 2>&1; then
+	if ! command -v rustup >/dev/null 2>&1; then
 		log "Setting up Rust toolchain..."
 
 		ensure rustup "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-update-default-toolchain"
-		# Source the environment to make cargo available for the rest of the script
-		. "${CARGO_HOME:-$HOME/.cargo}/env"
 		# Add cargo to project .envrc
 		local envrc_file
 		envrc_file=$(get_envrc_path)
@@ -259,13 +239,14 @@ setup_rust() {
 	else
 		log "rustup is already installed."
 	fi
+	# Source the environment to make cargo available for the rest of the script
+	. "${CARGO_HOME:-$HOME/.cargo}/env"
 }
 
 setup_cargo() {
 	log "Installing essential cargo tools (just, cargo-nextest, taplo)..."
 	if ! command -v cargo >/dev/null 2>&1; then
-		err "Cargo is not on the PATH. Cannot install cargo tools."
-		return 1
+		rustup toolchain install stable -q
 	fi
 	ensure just "cargo install --locked just"
 	ensure cargo-nextest "cargo install --locked cargo-nextest"
@@ -304,6 +285,18 @@ setup_act() {
 
 setup_gh_auth() {
 	log "Checking GitHub authentication..."
+
+	# In CI/non-interactive contexts we never want to prompt.
+	# If a token is available, assume authentication is handled by the environment.
+	if [ "${CI:-}" = "true" ] || [ "${GITHUB_ACTIONS:-}" = "true" ] || [ ! -t 0 ]; then
+		if [ -n "${GH_TOKEN:-}" ] || [ -n "${GITHUB_TOKEN:-}" ]; then
+			log "CI/non-interactive environment detected; token present, skipping 'gh auth login'."
+			return 0
+		fi
+		warn "CI/non-interactive environment detected and no GH token env var found; skipping 'gh auth login'."
+		return 0
+	fi
+
 	if ! gh auth status >/dev/null 2>&1; then
 		warn "You are not logged into GitHub. Please run 'gh auth login'."
 		gh auth login
@@ -358,16 +351,14 @@ setup_shell_rc() {
 	rc_file=$(get_envrc_path) || return
 	affirm 'export PATH="$HOME/.local/bin:$PATH"' "$rc_file" "Adding local bin directory to PATH"
 
-	log "Configuring Starship for shells..."
-	if [ -f "$HOME/.zshrc" ]; then
-		sedi 's/ZSH_THEME=".*"/ZSH_THEME=""/g' "$HOME/.zshrc"
-	fi
+	log "Shell environment configured."
 }
 
 main() {
 	detect_os
 
-	git config --global --add safe.directory "$(pwd)"
+	cd "$ROOT"
+	git config --global --add safe.directory "$ROOT"
 
 	setup_base_packages
 	setup_direnv
@@ -377,7 +368,6 @@ main() {
 	setup_act
 	setup_submodules
 	setup_git_hooks
-	setup_cursor
 	setup_rust
 	setup_cargo
 	setup_shfmt

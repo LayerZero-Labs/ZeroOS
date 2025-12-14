@@ -7,6 +7,94 @@ use std::process::{exit, Command};
 
 use build::cmds::{BuildArgs, StdMode};
 
+fn find_file_named(
+    root: &std::path::Path,
+    file_name: &str,
+    max_depth: usize,
+) -> Result<Option<PathBuf>> {
+    if max_depth == 0 {
+        return Ok(None);
+    }
+
+    let mut entries: Vec<_> = std::fs::read_dir(root)
+        .with_context(|| format!("Failed to list directory: {}", root.display()))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+
+    entries.sort_by_key(|e| e.file_name());
+
+    for entry in entries {
+        let path = entry.path();
+        if path.is_file() && path.file_name().and_then(|n| n.to_str()) == Some(file_name) {
+            return Ok(Some(path));
+        }
+        if path.is_dir() {
+            if let Some(found) = find_file_named(&path, file_name, max_depth - 1)? {
+                return Ok(Some(found));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+fn find_spike_platform_linker_template(workspace_root: &std::path::Path) -> Result<PathBuf> {
+    let output = Command::new("cargo")
+        .args(["metadata", "--format-version", "1", "--no-deps"])
+        .arg("--manifest-path")
+        .arg(workspace_root.join("Cargo.toml"))
+        .output()
+        .context("Failed to run `cargo metadata`")?;
+
+    if !output.status.success() {
+        anyhow::bail!(
+            "`cargo metadata` failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let v: serde_json::Value =
+        serde_json::from_slice(&output.stdout).context("Failed to parse cargo metadata JSON")?;
+
+    let packages = v
+        .get("packages")
+        .and_then(|p| p.as_array())
+        .ok_or_else(|| anyhow::anyhow!("cargo metadata JSON: missing `packages` array"))?;
+
+    for pkg in packages {
+        if pkg.get("name").and_then(|n| n.as_str()) != Some("spike-platform") {
+            continue;
+        }
+
+        let manifest = pkg
+            .get("manifest_path")
+            .and_then(|m| m.as_str())
+            .ok_or_else(|| {
+                anyhow::anyhow!("cargo metadata JSON: spike-platform missing manifest_path")
+            })?;
+
+        let manifest_dir = std::path::Path::new(manifest)
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("Invalid manifest_path for spike-platform"))?;
+
+        let src_tpl = manifest_dir.join("src/linker.ld.template");
+        if src_tpl.exists() {
+            return Ok(src_tpl);
+        }
+
+        if let Some(found) = find_file_named(manifest_dir, "linker.ld.template", 3)? {
+            return Ok(found);
+        }
+
+        anyhow::bail!(
+            "spike-platform linker template not found under {} (expected `src/linker.ld.template`)",
+            manifest_dir.display()
+        );
+    }
+
+    anyhow::bail!("spike-platform package not found in `cargo metadata` output")
+}
+
 #[derive(Parser)]
 #[command(name = "cargo-spike")]
 #[command(bin_name = "cargo")]
@@ -19,7 +107,9 @@ enum Cli {
 #[derive(clap::Subcommand, Debug)]
 enum SpikeCmd {
     Build(SpikeBuildArgs),
+
     Run(RunArgs),
+
     #[command(subcommand)]
     Generate(GenerateCmd),
 }
@@ -27,6 +117,7 @@ enum SpikeCmd {
 #[derive(clap::Subcommand, Debug)]
 enum GenerateCmd {
     Target(SpikeGenerateTargetArgs),
+
     Linker(SpikeGenerateLinkerArgs),
 }
 
@@ -44,7 +135,6 @@ struct RunArgs {
     #[arg(long, default_value = "RV64IMAC")]
     isa: String,
 
-    /// Maximum number of instructions to execute (default: 1M to avoid hangs)
     #[arg(long, short = 'n', default_value = "1000000")]
     instructions: u64,
 
@@ -103,6 +193,14 @@ fn build_command(args: SpikeBuildArgs) -> Result<()> {
     let workspace_root = build::cmds::find_workspace_root()?;
     debug!("workspace_root: {}", workspace_root.display());
 
+    let linker_tpl_path = find_spike_platform_linker_template(&workspace_root)?;
+    let linker_tpl = std::fs::read_to_string(&linker_tpl_path).with_context(|| {
+        format!(
+            "Failed to read spike-platform linker template: {}",
+            linker_tpl_path.display()
+        )
+    })?;
+
     let fully = args.base.mode == StdMode::Std || args.base.fully;
 
     let toolchain_paths = if args.base.mode == StdMode::Std || fully {
@@ -115,7 +213,12 @@ fn build_command(args: SpikeBuildArgs) -> Result<()> {
         None
     };
 
-    build::cmds::build_binary(&workspace_root, &args.base, toolchain_paths)?;
+    build::cmds::build_binary(
+        &workspace_root,
+        &args.base,
+        toolchain_paths,
+        Some(linker_tpl),
+    )?;
 
     Ok(())
 }
@@ -136,7 +239,7 @@ fn run_command(args: RunArgs) -> Result<()> {
         }
     );
 
-    println!("🚀 Running on Spike simulator...\n");
+    println!("Running on Spike simulator...\n");
 
     let mut spike_cmd = Command::new("spike");
     spike_cmd.arg(format!("--isa={}", args.isa));

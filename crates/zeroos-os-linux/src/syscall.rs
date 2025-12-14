@@ -1,141 +1,126 @@
 #![allow(non_upper_case_globals)]
 
 use cfg_if::cfg_if;
-use foundation::handlers::{self, HandlerContext};
+use foundation::SyscallFrame;
 use libc::{self, c_long, *};
 
-extern crate arch_riscv;
-use arch_riscv::PtRegs;
+use crate::handlers;
+#[cfg(feature = "scheduler")]
+use crate::handlers::HandlerContext;
+
+#[inline(always)]
+fn with_ret<Frame, F>(regs: *mut Frame, f: F)
+where
+    Frame: SyscallFrame,
+    F: FnOnce(&Frame) -> isize,
+{
+    let r = unsafe { &*regs };
+    let ret = f(r);
+    unsafe { (*regs).set_ret(ret) }
+}
+
+macro_rules! usize_ty {
+    ($ignored:tt) => {
+        usize
+    };
+}
 
 macro_rules! define_call {
-    (0, $name:ident) => {
+    ($name:ident ()) => {
+        #[allow(dead_code)]
         #[inline(always)]
-        fn $name<F>(regs: *mut PtRegs, f: F)
+        fn $name<Frame, F>(regs: *mut Frame, f: F)
         where
+            Frame: SyscallFrame,
             F: FnOnce() -> isize,
         {
-            let ret = f();
-            unsafe {
-                (*regs).a0 = ret as usize;
-            }
+            with_ret(regs, |_| f())
         }
     };
-    ($n:literal, $name:ident, $( $field:ident : $ty:ty ),+ ) => {
+    ($name:ident ($($idx:tt),+)) => {
+        #[allow(dead_code)]
         #[inline(always)]
-        fn $name<F>(regs: *mut PtRegs, f: F)
+        fn $name<Frame, F>(regs: *mut Frame, f: F)
         where
-            F: FnOnce($( $ty ),+) -> isize,
+            Frame: SyscallFrame,
+            F: FnOnce($(usize_ty!($idx)),+) -> isize,
         {
-            let r = unsafe { &*regs };
-            let ret = f($( r.$field as $ty ),+);
-            unsafe {
-                (*regs).a0 = ret as usize;
-            }
+            with_ret(regs, |r| f($(r.arg($idx)),+))
         }
     };
 }
 
-define_call!(0, call0);
-define_call!(1, call1, a0: usize);
-define_call!(2, call2, a0: usize, a1: usize);
-define_call!(3, call3, a0: usize, a1: usize, a2: usize);
-define_call!(4, call4, a0: usize, a1: usize, a2: usize, a3: usize);
-define_call!(5, call5, a0: usize, a1: usize, a2: usize, a3: usize, a4: usize);
-define_call!(6, call6, a0: usize, a1: usize, a2: usize, a3: usize, a4: usize, a5: usize);
+define_call!(call0());
+define_call!(call1(0));
+define_call!(call2(0, 1));
+define_call!(call3(0, 1, 2));
+define_call!(call4(0, 1, 2, 3));
+define_call!(call5(0, 1, 2, 3, 4));
+define_call!(call6(0, 1, 2, 3, 4, 5));
 
-pub fn dispatch_syscall(regs: *mut PtRegs) {
+/// # Safety
+/// `regs` must be a valid pointer to a syscall frame.
+pub unsafe fn dispatch_syscall<Frame: SyscallFrame>(regs: *mut Frame) {
     let regs_ref = unsafe { &*regs };
 
-    let nr = regs_ref.a7;
-    let mepc = regs_ref.mepc;
-    let frame_ptr = regs as usize;
-
-    let ctx = HandlerContext::new(mepc, frame_ptr);
+    let nr = regs_ref.syscall_number();
     let nr = nr as c_long;
-
-    // `foundation::kfn::update_frame` here to avoid double-updates or
 
     cfg_if! { if #[cfg(feature = "memory")] {
         match nr {
             SYS_brk => return call1(regs, handlers::memory::sys_brk),
-            SYS_mmap => return call6(regs, |addr, len, prot, flags, fd, offset| {
-                handlers::memory::sys_mmap(addr, len, prot, flags, fd, offset)
-            }),
+            SYS_mmap => return call6(regs, handlers::memory::sys_mmap),
             SYS_munmap => return call2(regs, handlers::memory::sys_munmap),
-            SYS_mprotect => return call3(regs, |addr, len, prot| {
-                handlers::memory::sys_mprotect(addr, len, prot)
-            }),
-            SYS_madvise => return call3(regs, |_addr, _len, _advice| 0), // No-op: hints are advisory, safe to ignore
+            SYS_mprotect => return call3(regs, handlers::memory::sys_mprotect),
+            SYS_madvise => return call3(regs, |_addr, _len, _advice| 0),
             _ => {}
         }
     }}
 
     cfg_if! { if #[cfg(feature = "scheduler")] {
+        let mepc = regs_ref.pc();
+        let frame_ptr = regs as usize;
+        let ctx = HandlerContext::new(mepc, frame_ptr);
         match nr {
             SYS_clone => return call5(regs, |flags, stack, parent_tid, tls, child_tid| {
                 handlers::thread::sys_clone(flags, stack, parent_tid, tls, child_tid, &ctx)
             }),
-            SYS_exit => return call1(regs, |status| handlers::thread::sys_exit(status)),
-            SYS_exit_group => return call1(regs, |status| handlers::thread::sys_exit_group(status)),
             SYS_futex => return call3(regs, |addr, op, val| {
                 handlers::thread::sys_futex(addr, op, val, &ctx)
             }),
             SYS_sched_yield => return call0(regs, || handlers::thread::sys_sched_yield(&ctx)),
-            SYS_getpid => return call0(regs, || handlers::thread::sys_getpid()),
-            SYS_gettid => return call0(regs, || handlers::thread::sys_gettid()),
-            SYS_set_tid_address => return call1(regs, |tidptr| handlers::thread::sys_set_tid_address(tidptr)),
+            SYS_getpid => return call0(regs, handlers::thread::sys_getpid),
+            SYS_gettid => return call0(regs, handlers::thread::sys_gettid),
+            SYS_set_tid_address => return call1(regs, handlers::thread::sys_set_tid_address),
             _ => {}
         }
     }}
 
     cfg_if! { if #[cfg(feature = "vfs")] {
         match nr {
-            SYS_openat => return call4(regs, |dirfd, path, flags, mode| {
-                handlers::vfs::sys_openat(dirfd, path, flags, mode)
-            }),
+            SYS_openat => return call4(regs, handlers::vfs::sys_openat),
             SYS_close => return call1(regs, handlers::vfs::sys_close),
             SYS_read => return call3(regs, handlers::vfs::sys_read),
             SYS_write => return call3(regs, handlers::vfs::sys_write),
-            SYS_readv => return call3(regs, |fd, iov, iovcnt| {
-                handlers::vfs::sys_readv(fd, iov, iovcnt)
-            }),
-            SYS_writev => return call3(regs, |fd, iov, iovcnt| {
-                handlers::vfs::sys_writev(fd, iov, iovcnt)
-            }),
-            SYS_lseek => return call3(regs, |fd, offset, whence| {
-                handlers::vfs::sys_lseek(fd, offset, whence)
-            }),
-            SYS_ioctl => return call3(regs, |fd, request, arg| {
-                handlers::vfs::sys_ioctl(fd, request, arg)
-            }),
+            SYS_readv => return call3(regs, handlers::vfs::sys_readv),
+            SYS_writev => return call3(regs, handlers::vfs::sys_writev),
+            SYS_lseek => return call3(regs, handlers::vfs::sys_lseek),
+            SYS_ioctl => return call3(regs, handlers::vfs::sys_ioctl),
             SYS_fstat => return call2(regs, handlers::vfs::sys_fstat),
             _ => {}
         }
     }}
 
     cfg_if! { if #[cfg(feature = "random")] {
-        if nr == SYS_getrandom { return call3(regs, |buf, buflen, flags| {
-            handlers::random::sys_getrandom(buf, buflen, flags)
-        }) }
+        if nr == SYS_getrandom {
+            return call3(regs, handlers::random::sys_getrandom);
+        }
     }}
 
     match nr {
-        SYS_exit | SYS_exit_group => call1(regs, handlers::info::sys_exit),
-        SYS_clock_gettime => call2(regs, |clockid, timespec| {
-            handlers::info::sys_clock_gettime(clockid, timespec)
-        }),
-        SYS_prlimit64 => call4(regs, |pid, res, new_limit, old_limit| {
-            handlers::info::sys_prlimit64(pid, res, new_limit, old_limit)
-        }),
-        SYS_rt_sigaction => call3(regs, |sig, act, oldact| {
-            handlers::info::sys_rt_sigaction(sig, act, oldact)
-        }),
-        SYS_rt_sigprocmask => call3(regs, |how, set, oldset| {
-            handlers::info::sys_rt_sigprocmask(how, set, oldset)
-        }),
-        SYS_rt_sigreturn | SYS_set_robust_list | SYS_get_robust_list => {
-            call0(regs, handlers::sys_noop)
-        }
-        _ => call0(regs, handlers::sys_unsupported),
+        SYS_exit => return call1(regs, handlers::sys_exit),
+        SYS_exit_group => return call1(regs, handlers::sys_exit_group),
+        _ => {}
     }
+    call0(regs, handlers::sys_unsupported)
 }

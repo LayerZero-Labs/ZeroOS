@@ -80,6 +80,12 @@ execution model while preserving the familiar POSIX/Linux syscall interface.
 ./bootstrap
 ```
 
+If you're working in a devcontainer, run:
+
+```bash
+./bootstrap --install-shell-integration
+```
+
 ### Examples
 
 ```bash

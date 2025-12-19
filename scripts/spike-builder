@@ -1,34 +1,64 @@
 #!/bin/bash
 set -euo pipefail
 
-PREFIX="${PREFIX:-/opt/riscv}"
-OUTDIR="${OUTDIR:-/srv}"
+PREFIX="${PREFIX:-/tmp/opt/riscv}"
+OUTDIR="${OUTDIR:-/tmp/spike-releases}"
 NAME="${NAME:-spike}"
 
-log(){ echo -e "\033[1;32m==> $*\033[0m"; }
-err(){ echo -e "\033[1;31m[!] $*\033[0m" >&2; exit 1; }
-
-version(){ "$PREFIX/bin/spike" --help 2>&1 | sed -n 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' || echo unknown; }
-
-build(){
-  rm -rf /tmp/riscv-isa-sim
-  git clone --depth=1 https://github.com/riscv-software-src/riscv-isa-sim.git /tmp/riscv-isa-sim
-  cd /tmp/riscv-isa-sim && mkdir build && cd build
-  ../configure --prefix="$PREFIX" LDFLAGS="-s" && make -j"$(nproc)" install
-  log "Installed Spike $(version)"
+log() { echo -e "\033[1;32m==> $*\033[0m"; }
+err() {
+	echo -e "\033[1;31m[!] $*\033[0m" >&2
+	exit 1
 }
 
-package(){
-  [[ -x "$PREFIX/bin/spike" ]] || err "Spike not found in $PREFIX/bin"
-  ver=$(version)
-  tarball="$OUTDIR/${NAME}-${ver}-$(uname -s)-$(uname -m).tar.gz"
-  mkdir -p "$OUTDIR"
-  tar zcf "$tarball" -C "$PREFIX" .
-  log "Created $tarball ($(du -h "$tarball" | cut -f1))"
+version() {
+	# Keep artifact naming stable: print exactly one version token, or "unknown".
+	local v
+	# NOTE: Use grep -E (portable across GNU/BSD) rather than sed \+ (GNU-only).
+	# With `set -o pipefail`, a non-match would fail the pipeline; `|| true` keeps
+	# this function non-fatal and allows a clean fallback to "unknown".
+	v=$("$PREFIX/bin/spike" --help 2>&1 | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
+	v=${v:-unknown}
+	printf '%s\n' "$v"
+}
+
+cpu_count() {
+	local n
+	n=$( (command -v nproc >/dev/null 2>&1 && nproc) || true)
+	if [[ -n "${n:-}" ]]; then
+		printf '%s\n' "$n"
+		return
+	fi
+
+	n=$( (command -v getconf >/dev/null 2>&1 && getconf _NPROCESSORS_ONLN) || true)
+	if [[ -n "${n:-}" ]]; then
+		printf '%s\n' "$n"
+		return
+	fi
+
+	n=$( (command -v sysctl >/dev/null 2>&1 && sysctl -n hw.ncpu) || true)
+	printf '%s\n' "${n:-1}"
+}
+
+build() {
+	rm -rf /tmp/riscv-isa-sim
+	git clone --depth=1 https://github.com/riscv-software-src/riscv-isa-sim.git /tmp/riscv-isa-sim
+	cd /tmp/riscv-isa-sim && mkdir build && cd build
+	../configure --prefix="$PREFIX" LDFLAGS="-s" && make -j"$(cpu_count)" install
+	log "Installed Spike $(version)"
+}
+
+package() {
+	[[ -x "$PREFIX/bin/spike" ]] || err "Spike not found in $PREFIX/bin"
+	ver=$(version)
+	tarball="$OUTDIR/${NAME}-${ver}-$(uname -s)-$(uname -m).tar.gz"
+	mkdir -p "$OUTDIR"
+	tar zcf "$tarball" -C "$PREFIX" .
+	log "Created $tarball ($(du -h "$tarball" | cut -f1))"
 }
 
 case "${1:-}" in
-  build) build;;
-  package) package;;
-  *) err "Usage: $0 spike|package";;
+build) build ;;
+package) package ;;
+*) err "Usage: $0 build|package" ;;
 esac

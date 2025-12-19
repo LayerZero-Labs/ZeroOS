@@ -109,6 +109,13 @@ jobs:
           tag_name="spike-${{ steps.version.outputs.version }}"
           echo "tag=$tag_name" >> "$GITHUB_OUTPUT"
 
+          # If the tag already exists (e.g., rerunning the workflow for the same
+          # Spike version), reuse it rather than failing.
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag_name" >/dev/null 2>&1; then
+            echo "Tag '$tag_name' already exists on origin; reusing."
+            exit 0
+          fi
+
           # Create and push tag
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -120,6 +127,9 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: ${{ steps.tag.outputs.tag }}
+          # Allow re-runs of the workflow for the same tag to replace assets
+          # (GitHub rejects duplicate asset names otherwise).
+          overwrite_files: true
           body: |
             ## Spike RISC-V Simulator ${{ steps.version.outputs.version }}
 

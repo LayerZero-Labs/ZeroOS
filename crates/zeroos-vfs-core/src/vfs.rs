@@ -1,7 +1,6 @@
 use crate::{DeviceFactory, Fd, FdEntry, VfsResult};
 use foundation::utils::GlobalCell;
 
-// NOTE: Tune this for your workload
 const MAX_FDS: usize = 256;
 
 pub struct Vfs {

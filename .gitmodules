@@ -1,3 +1,0 @@
-[submodule "third-party/htif"]
-	path = third-party/htif
-	url = https://github.com/LayerZero-Research/htif.git

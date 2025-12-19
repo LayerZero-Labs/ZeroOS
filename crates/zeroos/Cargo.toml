@@ -20,10 +20,14 @@ debug = [
 bounds-checks = ["runtime-musl?/bounds-checks"]
 
 # Architecture
-arch-riscv = ["dep:arch-riscv", "scheduler-cooperative?/riscv"]
+arch-riscv = [
+  "dep:arch-riscv",
+  "foundation/arch",
+  "scheduler-cooperative?/riscv",
+]
 
 # OS
-os-linux = ["dep:os-linux"]
+os-linux = ["dep:os-linux", "foundation/trap"]
 
 # Runtime
 runtime-nostd = ["dep:runtime-nostd"]

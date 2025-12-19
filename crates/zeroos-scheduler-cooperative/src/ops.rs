@@ -1,10 +1,10 @@
-use crate::context::Context;
 use crate::scheduler::Scheduler;
-use foundation::ArchContext;
-use libc;
 
-pub fn init() {
-    Scheduler::init();
+// Standard EPERM (Operation not permitted) value for ABI compatibility.
+use libc::EPERM;
+
+pub fn init() -> usize {
+    Scheduler::init()
 }
 
 pub fn spawn_thread(
@@ -13,19 +13,15 @@ pub fn spawn_thread(
     parent_tid_ptr: usize,
     child_tid_ptr: usize,
     clear_child_tid_ptr: usize,
-    mepc: usize,
-    frame_ptr: usize,
 ) -> isize {
     Scheduler::with_mut(|scheduler| {
-        let parent_context = if frame_ptr != 0 {
-            unsafe { core::ptr::read(frame_ptr as *const Context) }
-        } else if let Some(tcb) = scheduler.current_thread() {
-            unsafe { (*tcb.as_ptr()).trap_frame }
-        } else {
-            return -(libc::EPERM as isize);
-        };
+        // Recover the current trap frame from the current thread's kernel stack.
+        // This avoids threading trap-dispatch details through the scheduler API.
+        let parent_frame_ptr = foundation::kfn::arch::kcurrent_trap_frame() as usize;
+        let mepc =
+            unsafe { foundation::kfn::arch::ktrap_frame_get_pc(parent_frame_ptr as *const u8) };
 
-        let tid = scheduler.spawn_thread(parent_context, stack, tls, clear_child_tid_ptr, mepc);
+        let tid = scheduler.spawn_thread(parent_frame_ptr, stack, tls, clear_child_tid_ptr, mepc);
 
         if tid > 0 {
             let tid = tid as i32;
@@ -37,17 +33,12 @@ pub fn spawn_thread(
                     (child_tid_ptr as *mut i32).write_volatile(tid);
                 }
             }
-            if frame_ptr != 0 {
-                unsafe {
-                    let frame = &mut *(frame_ptr as *mut Context);
-                    frame.set_return_value(tid as usize);
-                }
-            }
+            // Parent return value is handled by syscall dispatch (`set_ret`), so no direct patching needed.
         }
 
         tid
     })
-    .unwrap_or(-(libc::EPERM as isize))
+    .unwrap_or(-EPERM as isize)
 }
 
 pub fn yield_now() -> isize {
@@ -56,16 +47,8 @@ pub fn yield_now() -> isize {
 }
 
 pub fn exit_current(code: i32) -> isize {
-    Scheduler::with_mut(|scheduler| scheduler.exit_current_and_yield(code)).unwrap_or_else(|| {
-        extern "C" {
-            static mut tohost: u64;
-        }
-        unsafe {
-            let payload = ((code as u64) << 1) | 1;
-            core::ptr::write_volatile(&raw mut tohost, payload);
-        }
-        0
-    })
+    Scheduler::with_mut(|scheduler| scheduler.exit_current_and_yield(code))
+        .unwrap_or_else(|| foundation::kfn::kexit(code))
 }
 
 pub fn current_tid() -> usize {
@@ -111,6 +94,4 @@ pub const SCHEDULER_OPS: foundation::ops::SchedulerOps = foundation::ops::Schedu
     wait_on_addr,
     wake_on_addr,
     set_clear_on_exit_addr: set_tid_address,
-    update_frame: crate::trap_glue::update_frame,
-    finish_trap: crate::trap_glue::finish_trap,
 };

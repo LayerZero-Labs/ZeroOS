@@ -1,15 +1,34 @@
-#[inline]
-pub fn kinit(seed: u64) {
-    unsafe { (crate::KERNEL.random.init)(seed) }
+use cfg_if::cfg_if;
+
+cfg_if! {
+    if #[cfg(feature = "random")] {
+        #[inline]
+        pub fn kinit(seed: u64) {
+            unsafe { (crate::KERNEL.random.init)(seed) }
+        }
+
+        #[inline]
+        /// # Safety
+        /// `buf` must be valid for writes of `len` bytes.
+        pub unsafe fn krandom(buf: *mut u8, len: usize) -> isize {
+            (crate::KERNEL.random.fill_bytes)(buf, len)
+        }
+    } else {
+        #[inline]
+        #[allow(dead_code)]
+        pub fn kinit(_seed: u64) {}
+
+        #[inline]
+        #[allow(dead_code)]
+        /// # Safety
+        /// `buf` is not used in the stub implementation.
+        pub unsafe fn krandom(_buf: *mut u8, _len: usize) -> isize {
+            -1
+        }
+    }
 }
 
-#[inline]
-/// # Safety
-/// `buf` must be valid for writes of `len` bytes.
-pub unsafe fn krandom(buf: *mut u8, len: usize) -> isize {
-    (crate::KERNEL.random.fill_bytes)(buf, len)
-}
-
+#[allow(dead_code)]
 pub trait KRandom: Sized {
     fn random() -> Self;
 }

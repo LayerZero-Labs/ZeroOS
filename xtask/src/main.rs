@@ -3,6 +3,7 @@ mod findup;
 mod massage;
 mod matrix;
 mod sh;
+mod spike_syscall_instcount;
 
 use clap::{Parser, Subcommand};
 
@@ -24,6 +25,9 @@ enum Command {
     Matrix(matrix::MatrixArgs),
     /// Run GitHub Actions locally via `act` (forwards all args to the `act` CLI)
     Act(act::ActArgs),
+    /// Measure syscall instruction-count "cost" using Spike commit logs.
+    #[command(name = "spike-syscall-instcount")]
+    SpikeSyscallInstCount(spike_syscall_instcount::SpikeSyscallInstCountArgs),
 }
 
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
@@ -31,6 +35,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Command::Massage(args) => massage::run(args),
         Command::Matrix(args) => matrix::run(args),
         Command::Act(args) => act::run(args),
+        Command::SpikeSyscallInstCount(args) => spike_syscall_instcount::run(args),
     }
 }
 

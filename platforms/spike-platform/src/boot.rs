@@ -52,7 +52,15 @@ pub extern "C" fn __platform_bootstrap() {
 
             #[cfg(feature = "thread")]
             {
-                foundation::kfn::scheduler::kinit();
+                let anchor = foundation::kfn::scheduler::kinit();
+
+                // Prime the current tp with the returned anchor and set mscratch to 0.
+                // In kernel mode, mscratch must be 0 to correctly identify traps from user mode.
+                #[cfg(any(target_arch = "riscv32", target_arch = "riscv64"))]
+                unsafe {
+                    core::arch::asm!("mv tp, {0}", in(reg) anchor);
+                    core::arch::asm!("csrw mscratch, x0");
+                }
             }
 
             #[cfg(feature = "vfs")]

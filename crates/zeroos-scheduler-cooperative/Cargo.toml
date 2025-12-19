@@ -9,12 +9,11 @@ name = "zeroos_scheduler_cooperative"
 path = "src/lib.rs"
 
 [dependencies]
-foundation = { workspace = true, features = ["scheduler"] }
-libc = { workspace = true }
-arch-riscv = { workspace = true, optional = true }
+foundation = { workspace = true, features = ["scheduler", "memory", "arch"] }
 zeroos-macros = { workspace = true }
 cfg-if.workspace = true
+libc.workspace = true
 
 [features]
 default = []
-riscv = ["arch-riscv"]
+riscv = []

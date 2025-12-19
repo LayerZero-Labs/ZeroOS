@@ -27,6 +27,7 @@ members = [
   "platforms/spike-platform",
   "platforms/spike-build",
   "examples/fibonacci",
+  "examples/syscall-cycles",
   "examples/std-smoke",
   "examples/c-smoke/rust",
 ]

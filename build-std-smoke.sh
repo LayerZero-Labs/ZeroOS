@@ -9,21 +9,14 @@ OUT_DIR="${ROOT}/target/${TARGET_TRIPLE}/$([ "$PROFILE" = "dev" ] && echo debug 
 BIN="${OUT_DIR}/std-smoke"
 cd "${ROOT}"
 
-if ! command -v spike >/dev/null 2>&1; then
-	echo "Error: 'spike' not found in PATH."
-	echo "Hint: install Spike (riscv-isa-sim) and ensure 'spike' is on PATH."
-	echo "      You can use: PREFIX=\$HOME/.local/riscv ./scripts/spike-builder build"
-	exit 1
-fi
-
 echo "Building std-smoke example..."
-cargo spike build -p std-smoke --target "${TARGET_TRIPLE}" --mode std --features=std --profile "${PROFILE}" --quiet
+cargo spike build -p std-smoke --target "${TARGET_TRIPLE}" --mode std --quiet --features=std --profile "${PROFILE}"
 
 echo "Running on Spike simulator..."
 OUT="$(mktemp)"
 trap 'rm -f "${OUT}"' EXIT
 
-cargo spike run "${BIN}" --isa RV64IMAC --instructions 20000000 | tee "${OUT}"
+cargo spike run "${BIN}" --isa RV64IMAC --instructions 200000000 | tee "${OUT}"
 
 grep -q "smoke:alloc: ok" "${OUT}"
 grep -q "smoke:thread: result=348551" "${OUT}"

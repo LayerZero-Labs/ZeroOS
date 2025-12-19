@@ -36,6 +36,7 @@ cfg_if::cfg_if! {
         #[global_allocator]
         static ALLOCATOR: zeroos::alloc::System = zeroos::alloc::System;
 
+        #[cfg(target_os = "none")]
         #[panic_handler]
         fn panic(info: &core::panic::PanicInfo) -> ! {
             eprintln!("PANIC: {}", info);

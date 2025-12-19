@@ -15,7 +15,7 @@ crates/zeroos-arch-riscv::_start
             ↳ zeroos::initialize()
             ↳ foundation::kfn::memory::kinit(...)         (if memory)
             ↳ install trap vector (mtvec = _trap_handler) (if os-linux)
-            ↳ foundation::kfn::scheduler::kinit()         (if thread)
+            ↳ foundation::kfn::scheduler::kinit()         (if thread; returns anchor address)
             ↳ foundation::kfn::vfs::kinit()               (if vfs)
             ↳ foundation::kfn::random::kinit(0)           (if random)
         ↳ crates/zeroos-runtime-*/__runtime_bootstrap()

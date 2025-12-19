@@ -1,0 +1,26 @@
+[package]
+name = "syscall-cycles"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+platform.workspace = true
+debug.workspace = true
+cfg-if.workspace = true
+
+[features]
+default = []
+std = [
+  "with-spike",
+  # minimal std(musl) runtime support without enabling `platform/std` (which pulls in threads)
+  "platform/os-linux",
+  "platform/runtime-musl",
+  "platform/libunwind",
+  "memory",
+  "platform/vfs",
+  "platform/vfs-device-console",
+]
+with-spike = ["platform/with-spike"]
+debug = ["platform/debug"]
+memory = ["platform/memory"]
+bounds-checks = ["platform/bounds-checks"]

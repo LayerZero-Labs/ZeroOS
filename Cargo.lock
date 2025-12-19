@@ -817,6 +817,7 @@ dependencies = [
  "cfg-if",
  "htif",
  "libc",
+ "riscv",
  "zeroos",
  "zeroos-debug",
  "zeroos-foundation",
@@ -868,6 +869,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "syscall-cycles"
+version = "0.1.0"
+dependencies = [
+ "cfg-if",
+ "platform",
+ "zeroos-debug",
 ]
 
 [[package]]
@@ -1300,6 +1310,7 @@ dependencies = [
 name = "zeroos-runtime-nostd"
 version = "0.1.0"
 dependencies = [
+ "cfg-if",
  "zeroos-foundation",
 ]
 
@@ -1309,7 +1320,6 @@ version = "0.1.0"
 dependencies = [
  "cfg-if",
  "libc",
- "zeroos-arch-riscv",
  "zeroos-foundation",
  "zeroos-macros",
 ]

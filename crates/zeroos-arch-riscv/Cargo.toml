@@ -11,7 +11,7 @@ path = "src/lib.rs"
 [dependencies]
 riscv.workspace = true
 cfg-if.workspace = true
-foundation = { workspace = true }
+foundation = { workspace = true, features = ["arch"] }
 debug.workspace = true
 memoffset.workspace = true
 zeroos-macros.workspace = true

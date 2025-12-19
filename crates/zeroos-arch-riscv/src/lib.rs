@@ -4,7 +4,10 @@
 #![recursion_limit = "2048"]
 
 pub mod boot;
-
+pub mod ops;
+pub mod ret_from_fork;
+pub mod switch_to;
+pub mod thread_ctx;
 pub mod trap;
 
 extern "C" {
@@ -18,7 +21,10 @@ extern "C" {
 
 mod riscv {
     pub use crate::boot::{__bootstrap, _start};
-    pub use crate::trap::{decode_trap, PtRegs, TrapFrame, _default_trap_handler};
+    pub use crate::ops::ARCH_OPS;
+    pub use crate::ret_from_fork::ret_from_fork;
+    pub use crate::trap::{TrapFrame, _default_trap_handler};
+    pub use foundation::kfn::thread::ThreadAnchor;
     pub use riscv::register::mcause::{Exception, Interrupt, Trap};
 }
 

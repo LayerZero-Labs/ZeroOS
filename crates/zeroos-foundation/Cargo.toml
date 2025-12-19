@@ -22,9 +22,10 @@ debug = ["debug/debug"]
 # Subsystem features
 memory = []
 scheduler = []
-syscall = []
+trap = []
 vfs = []
 random = []
+arch = []
 
 # Boot mode selection
 std = []

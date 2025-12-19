@@ -1,10 +1,12 @@
-use crate::thread::{apply_thread_ctx_to_frame, sync_thread_ctx_from_frame};
 use crate::thread::{ThreadControlBlock, ThreadState, Tid};
 use alloc::boxed::Box;
 use core::ptr::NonNull;
 use foundation::utils::GlobalOption;
-use foundation::{ArchContext, FramePointerContext};
-use libc;
+
+use libc::{EAGAIN, EDEADLK, EPERM};
+
+use alloc::alloc::Layout;
+use foundation::kfn::arch as karch;
 
 pub const MAX_THREADS: usize = 64;
 
@@ -33,8 +35,79 @@ impl Scheduler {
         }
     }
 
-    pub fn init() {
+    pub fn init() -> usize {
+        let anchor_ptr = foundation::kfn::scheduler::kalloc_kstack(crate::thread::KSTACK_SIZE);
+        if anchor_ptr.is_null() {
+            panic!("kalloc_kstack(KSTACK_SIZE) failed for boot thread");
+        }
+
         SCHEDULER.set(Scheduler::new());
+
+        Scheduler::with_mut(|scheduler| {
+            // Create the boot TCB (tid=1) eagerly.
+            // Note: we use kmalloc + ptr::write instead of Box::new to avoid triggering
+            // syscalls (via musl malloc) before the runtime is fully initialized.
+            let boot_layout = core::alloc::Layout::new::<ThreadControlBlock>();
+            let boot_ptr = foundation::kfn::memory::kmalloc(boot_layout) as *mut ThreadControlBlock;
+            if boot_ptr.is_null() {
+                panic!("kmalloc(ThreadControlBlock) failed for boot thread");
+            }
+
+            unsafe {
+                core::ptr::write(
+                    boot_ptr,
+                    ThreadControlBlock {
+                        thread_ctx: crate::thread::ThreadContext(core::ptr::null_mut()),
+                        tid: 1,
+                        state: ThreadState::Running,
+                        saved_pc: 0,
+                        futex_wait_addr: 0,
+                        clear_child_tid: 0,
+                        kstack_base: anchor_ptr as usize,
+                        kstack_size: crate::thread::KSTACK_SIZE,
+                    },
+                );
+            }
+
+            let mut boot = unsafe { Box::from_raw(boot_ptr) };
+
+            // Kernel context uses tp=anchor and sp=top-of-kstack.
+            {
+                // Initialize the boot trap frame on the kernel stack.
+                let tf_addr = unsafe { foundation::kfn::scheduler::ktrap_frame_addr(anchor_ptr) };
+                unsafe {
+                    karch::ktrap_frame_init(tf_addr as *mut u8, 0, 0, 0);
+                }
+
+                // Allocate + init arch thread context for boot.
+                let size = karch::kthread_ctx_size();
+                let align = karch::kthread_ctx_align();
+                let layout =
+                    Layout::from_size_align(size, align).expect("invalid thread ctx layout");
+                let ctx_ptr = foundation::kfn::memory::kzalloc(layout);
+                if ctx_ptr.is_null() {
+                    panic!("kzalloc(thread_ctx) failed for boot");
+                }
+                let anchor_addr = anchor_ptr as usize;
+                let kstack_top = anchor_addr + crate::thread::KSTACK_SIZE;
+                unsafe {
+                    karch::kthread_ctx_init(ctx_ptr, anchor_addr, kstack_top);
+                }
+                boot.thread_ctx = crate::thread::ThreadContext(ctx_ptr);
+            }
+
+            let ptr = unsafe { NonNull::new_unchecked(Box::into_raw(boot)) };
+            scheduler.threads[0] = Some(ptr);
+            scheduler.thread_count = 1;
+            scheduler.current_index = 0;
+            scheduler.next_tid = 2;
+
+            unsafe {
+                (*anchor_ptr).task_ptr = ptr.as_ptr() as usize;
+            }
+        });
+
+        anchor_ptr as usize
     }
 
     #[inline(always)]
@@ -65,7 +138,7 @@ impl Scheduler {
     pub fn yield_now(&mut self) {
         if let Some(tcb) = self.current_thread() {
             unsafe {
-                (*tcb.as_ptr()).thread_ctx.set_return_value(0);
+                karch::kthread_ctx_set_retval((*tcb.as_ptr()).thread_ctx_ptr_mut(), 0);
             }
         }
         if self.thread_count == 0 {
@@ -108,6 +181,17 @@ impl Scheduler {
             }
             self.current_index = next_idx;
         }
+
+        // Perform context switch if needed
+        unsafe {
+            if let (Some(mut old_ptr), Some(new_ptr)) =
+                (self.threads[current_idx], self.threads[self.current_index])
+            {
+                let old_tcb = old_ptr.as_mut();
+                let new_tcb = new_ptr.as_ref();
+                karch::kswitch_to(old_tcb.thread_ctx_ptr_mut(), new_tcb.thread_ctx_ptr());
+            }
+        }
     }
 
     pub fn wait_on_addr(&mut self, addr: usize, expected: i32) -> isize {
@@ -115,28 +199,30 @@ impl Scheduler {
         if actual != expected {
             if let Some(tcb) = self.current_thread() {
                 unsafe {
-                    (*tcb.as_ptr())
-                        .thread_ctx
-                        .set_return_value((-(libc::EAGAIN as isize)) as usize);
+                    karch::kthread_ctx_set_retval(
+                        (*tcb.as_ptr()).thread_ctx_ptr_mut(),
+                        (-EAGAIN as isize) as usize,
+                    );
                 }
             }
-            return -(libc::EAGAIN as isize);
+            return -EAGAIN as isize;
         }
 
         if self.thread_count() <= 1 {
             if let Some(tcb) = self.current_thread() {
                 unsafe {
-                    (*tcb.as_ptr())
-                        .thread_ctx
-                        .set_return_value((-(libc::EDEADLK as isize)) as usize);
+                    karch::kthread_ctx_set_retval(
+                        (*tcb.as_ptr()).thread_ctx_ptr_mut(),
+                        (-EDEADLK as isize) as usize,
+                    );
                 }
             }
-            return -(libc::EDEADLK as isize);
+            return -EDEADLK as isize;
         }
 
         if let Some(tcb) = self.current_thread() {
             unsafe {
-                (*tcb.as_ptr()).thread_ctx.set_return_value(0);
+                karch::kthread_ctx_set_retval((*tcb.as_ptr()).thread_ctx_ptr_mut(), 0);
             }
         }
 
@@ -154,7 +240,7 @@ impl Scheduler {
         let ret = self.wake_futex(addr, count);
         if let Some(tcb) = self.current_thread() {
             unsafe {
-                (*tcb.as_ptr()).thread_ctx.set_return_value(ret);
+                karch::kthread_ctx_set_retval((*tcb.as_ptr()).thread_ctx_ptr_mut(), ret);
             }
         }
         ret
@@ -162,29 +248,15 @@ impl Scheduler {
 
     pub fn spawn_thread(
         &mut self,
-        parent_context: crate::context::Context,
+        parent_frame_ptr: usize,
         stack: usize,
         tls: usize,
         clear_child_tid_ptr: usize,
         mepc: usize,
     ) -> isize {
         if self.thread_count == 0 {
-            let mut main_tcb = Box::new(crate::thread::ThreadControlBlock::new(
-                1,
-                parent_context.sp(),
-                parent_context.tp(),
-                mepc,
-            ));
-            main_tcb.trap_frame = parent_context;
-            sync_thread_ctx_from_frame(&mut main_tcb.thread_ctx, &main_tcb.trap_frame);
-            main_tcb.saved_pc = mepc;
-            main_tcb.state = crate::thread::ThreadState::Running;
-
-            let ptr = unsafe { NonNull::new_unchecked(Box::into_raw(main_tcb)) };
-            self.threads[0] = Some(ptr);
-            self.thread_count = 1;
-            self.current_index = 0;
-            self.next_tid = 2;
+            // Scheduler must be initialized (boot TCB installed) before spawning threads.
+            return -EPERM as isize;
         }
 
         let new_tid = self.next_tid;
@@ -195,26 +267,51 @@ impl Scheduler {
             new_tid, stack_base, tls, mepc,
         ));
 
-        child_tcb.trap_frame = parent_context;
-        sync_thread_ctx_from_frame(&mut child_tcb.thread_ctx, &child_tcb.trap_frame);
-        child_tcb.thread_ctx.set_sp(stack_base);
-        child_tcb.thread_ctx.set_tp(tls);
-        child_tcb.thread_ctx.set_return_value(0);
-        apply_thread_ctx_to_frame(&mut child_tcb.trap_frame, &child_tcb.thread_ctx);
-        child_tcb.trap_frame.set_frame_pointer(stack_base);
+        // Prepare child state
+        {
+            let anchor_ptr =
+                child_tcb.kstack_base as *const foundation::kfn::scheduler::ThreadAnchor;
+            let tf_addr = unsafe { foundation::kfn::scheduler::ktrap_frame_addr(anchor_ptr) };
+
+            // Clone parent trap frame into child (opaque to scheduler).
+            unsafe {
+                karch::ktrap_frame_clone(tf_addr as *mut u8, parent_frame_ptr as *const u8);
+
+                // Update child's stack pointer in the trap frame if a new stack was provided.
+                if stack != 0 {
+                    karch::ktrap_frame_set_sp(tf_addr as *mut u8, stack_base);
+                }
+                // Update child's TLS pointer in the trap frame if provided.
+                if tls != 0 {
+                    karch::ktrap_frame_set_tp(tf_addr as *mut u8, tls);
+                }
+
+                // Child return value = 0.
+                karch::ktrap_frame_set_retval(tf_addr as *mut u8, 0);
+
+                // Link anchor -> TCB.
+                let anchor_ptr =
+                    child_tcb.kstack_base as *mut foundation::kfn::scheduler::ThreadAnchor;
+                (*anchor_ptr).task_ptr = Box::as_ref(&child_tcb) as *const _ as usize;
+
+                // Bootstrap the child by returning into arch `ret_from_fork(tf_ptr)`.
+                karch::kthread_ctx_set_retval(child_tcb.thread_ctx_ptr_mut(), tf_addr);
+                karch::kthread_ctx_set_ra(child_tcb.thread_ctx_ptr_mut(), karch::kret_from_fork());
+            }
+        }
 
         child_tcb.clear_child_tid = clear_child_tid_ptr;
 
         let child_ptr = unsafe { NonNull::new_unchecked(Box::into_raw(child_tcb)) };
         if self.thread_count >= MAX_THREADS {
-            return -(libc::EPERM as isize);
+            return -EPERM as isize;
         }
         self.threads[self.thread_count] = Some(child_ptr);
         self.thread_count += 1;
 
         if let Some(parent_tcb) = self.current_thread() {
             unsafe {
-                (*parent_tcb.as_ptr()).thread_ctx.set_return_value(new_tid);
+                karch::kthread_ctx_set_retval((*parent_tcb.as_ptr()).thread_ctx_ptr_mut(), new_tid);
             }
         }
 
@@ -258,6 +355,7 @@ impl Scheduler {
                 }
             }
         }
+
         woken
     }
 
@@ -276,36 +374,13 @@ impl Scheduler {
             }
 
             if is_main_thread {
-                extern "C" {
-                    static mut tohost: u64;
-                }
-                unsafe {
-                    let payload = ((exit_code as u64) << 1) | 1;
-                    core::ptr::write_volatile(&raw mut tohost, payload);
-                }
-                return 0;
+                foundation::kfn::kexit(exit_code);
             }
 
-            if let Some(next_idx) =
-                self.find_next_ready((self.current_index + 1) % self.thread_count)
-            {
-                if let Some(next_tcb) = self.threads[next_idx] {
-                    unsafe {
-                        (*next_tcb.as_ptr()).state = ThreadState::Running;
-                        self.current_index = next_idx;
-                    }
-                }
-            }
+            self.yield_now();
             0
         } else {
-            extern "C" {
-                static mut tohost: u64;
-            }
-            unsafe {
-                let payload = ((exit_code as u64) << 1) | 1;
-                core::ptr::write_volatile(&raw mut tohost, payload);
-            }
-            0
+            foundation::kfn::kexit(exit_code);
         }
     }
 }

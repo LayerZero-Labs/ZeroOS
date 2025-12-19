@@ -1,4 +1,4 @@
-//! Platforms MUST provide `trap_handler(regs: *mut TrapFrame)` - this crate only provides the entry/exit wrapper.
+//! Platforms must provide `trap_handler(regs: *mut TrapFrame)`; this crate provides the entry/exit wrapper.
 
 use cfg_if::cfg_if;
 
@@ -7,55 +7,71 @@ pub use riscv::register::mcause::{Exception, Interrupt, Trap};
 #[repr(C, align(16))]
 #[derive(Clone, Copy)]
 pub struct TrapFrame {
-    pub ra: usize,
-    pub sp: usize,
-    pub gp: usize,
-    pub tp: usize,
-    pub t0: usize,
-    pub t1: usize,
-    pub t2: usize,
-    pub s0: usize,
-    pub s1: usize,
-    pub a0: usize,
-    pub a1: usize,
-    pub a2: usize,
-    pub a3: usize,
-    pub a4: usize,
-    pub a5: usize,
-    pub a6: usize,
-    pub a7: usize,
-    pub s2: usize,
-    pub s3: usize,
-    pub s4: usize,
-    pub s5: usize,
-    pub s6: usize,
-    pub s7: usize,
-    pub s8: usize,
-    pub s9: usize,
-    pub s10: usize,
-    pub s11: usize,
-    pub t3: usize,
-    pub t4: usize,
-    pub t5: usize,
-    pub t6: usize,
+    // Integer registers (x0 is hardwired to zero and not stored).
+    pub ra: usize,  // x1
+    pub sp: usize,  // x2
+    pub gp: usize,  // x3
+    pub tp: usize,  // x4
+    pub t0: usize,  // x5
+    pub t1: usize,  // x6
+    pub t2: usize,  // x7
+    pub s0: usize,  // x8
+    pub s1: usize,  // x9
+    pub a0: usize,  // x10
+    pub a1: usize,  // x11
+    pub a2: usize,  // x12
+    pub a3: usize,  // x13
+    pub a4: usize,  // x14
+    pub a5: usize,  // x15
+    pub a6: usize,  // x16
+    pub a7: usize,  // x17
+    pub s2: usize,  // x18
+    pub s3: usize,  // x19
+    pub s4: usize,  // x20
+    pub s5: usize,  // x21
+    pub s6: usize,  // x22
+    pub s7: usize,  // x23
+    pub s8: usize,  // x24
+    pub s9: usize,  // x25
+    pub s10: usize, // x26
+    pub s11: usize, // x27
+    pub t3: usize,  // x28
+    pub t4: usize,  // x29
+    pub t5: usize,  // x30
+    pub t6: usize,  // x31
 
     pub mepc: usize,
     pub mstatus: usize,
     pub mcause: usize,
     pub mtval: usize,
+
+    pub from_kernel: usize,
 }
 
-pub type PtRegs = TrapFrame;
-
 #[allow(non_camel_case_types)]
-pub type pt_regs = TrapFrame;
+pub type TrapFramePtr = *mut TrapFrame;
 
-impl foundation::ArchContext for TrapFrame {
-    fn new() -> Self {
+impl Default for TrapFrame {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl TrapFrame {
+    pub fn new() -> Self {
+        let mut mstatus: usize = 0;
+        // Set MPP = 3 (Machine mode) so mret returns to M-mode by default.
+        mstatus |= 3 << 11;
+
+        let current_gp: usize;
+        unsafe {
+            core::arch::asm!("mv {}, gp", out(reg) current_gp);
+        }
+
         Self {
             ra: 0,
             sp: 0,
-            gp: 0,
+            gp: current_gp,
             tp: 0,
             t0: 0,
             t1: 0,
@@ -85,53 +101,17 @@ impl foundation::ArchContext for TrapFrame {
             t5: 0,
             t6: 0,
             mepc: 0,
-            mstatus: 0,
+            mstatus,
             mcause: 0,
             mtval: 0,
+            from_kernel: 0,
         }
     }
-    fn sp(&self) -> usize {
-        self.sp
-    }
-    fn set_sp(&mut self, sp: usize) {
-        self.sp = sp;
-    }
-    fn tp(&self) -> usize {
-        self.tp
-    }
-    fn set_tp(&mut self, tp: usize) {
-        self.tp = tp;
-    }
-    fn return_value(&self) -> usize {
-        self.a0
-    }
-    fn set_return_value(&mut self, val: usize) {
-        self.a0 = val;
-    }
-    fn ra(&self) -> usize {
-        self.ra
-    }
-    fn set_ra(&mut self, ra: usize) {
-        self.ra = ra;
-    }
-    fn gp(&self) -> usize {
-        self.gp
-    }
-    fn set_gp(&mut self, gp: usize) {
-        self.gp = gp;
-    }
-    unsafe fn read_from_ptr(ptr: *const Self) -> Self {
-        *ptr
-    }
-    unsafe fn write_to_ptr(&self, ptr: *mut Self) {
-        *ptr = *self;
-    }
-}
 
-impl foundation::FramePointerContext for TrapFrame {
-    #[inline(always)]
-    fn set_frame_pointer(&mut self, fp: usize) {
-        self.s0 = fp;
+    /// # Safety
+    /// `ptr` must point to a valid, aligned region of at least `size_of::<TrapFrame>()` bytes.
+    pub unsafe fn write_to_ptr(&self, ptr: *mut Self) {
+        *ptr = *self;
     }
 }
 
@@ -167,9 +147,9 @@ impl foundation::SyscallFrame for TrapFrame {
 
 cfg_if! {
     if #[cfg(target_arch = "riscv64")] {
-        zeroos_macros::define_register_helpers!(crate::TrapFrame, "sd", "ld");
+        zeroos_macros::define_register_helpers!("sd", "ld");
     } else if #[cfg(target_arch = "riscv32")] {
-        zeroos_macros::define_register_helpers!(crate::TrapFrame, "sw", "lw");
+        zeroos_macros::define_register_helpers!("sw", "lw");
     }
 }
 
@@ -177,130 +157,153 @@ use core::arch::global_asm;
 
 mod imp {
     use super::*;
-    use zeroos_macros::asm_block;
 
+    /// # Safety
+    /// This is the low-level trap entry point. It must be called by the CPU
+    /// hardware vector with a valid `tp` (if from user) or valid kernel stack.
     #[unsafe(naked)]
     #[no_mangle]
-    /// # Safety
-    /// Trap entrypoint; must only be called from the trap path with a valid stack/context.
-    pub unsafe extern "C" fn save_regs() -> *mut PtRegs {
-        asm_block!(
-            "addi sp, sp, -{PTREGS_SIZE}",
-            store!(t0),
-            "addi t0, sp, {PTREGS_SIZE}",
+    pub unsafe extern "C" fn _default_trap_handler() -> ! {
+        #[allow(unused_imports)]
+        use crate::trap::TrapFrame;
+        #[allow(unused_imports)]
+        use foundation::kfn::thread::ThreadAnchor;
 
-            "csrr t1, mscratch",
-            store!(t1, ra),
-            store!(t0, sp),
-            store!(gp),
-            store!(tp),
-            store!(t1),
-            store!(t2),
-            store!(s0),
-            store!(s1),
-            store!(a0),
-            store!(a1),
-            store!(a2),
-            store!(a3),
-            store!(a4),
-            store!(a5),
-            store!(a6),
-            store!(a7),
-            store!(s2),
-            store!(s3),
-            store!(s4),
-            store!(s5),
-            store!(s6),
-            store!(s7),
-            store!(s8),
-            store!(s9),
-            store!(s10),
-            store!(s11),
-            store!(t3),
-            store!(t4),
-            store!(t5),
-            store!(t6),
-            "csrr t0, mepc",
-            "csrr t1, mstatus",
-            "csrr t2, mcause",
-            "csrr t3, mtval",
-            store!(t0, mepc),
-            store!(t1, mstatus),
-            store!(t2, mcause),
-            store!(t3, mtval),
-            "mv a0, sp",
-            "ret",
-            PTREGS_SIZE = const core::mem::size_of::<PtRegs>(),
-        );
-    }
+        cfg_if! {
+            if #[cfg(target_arch = "riscv64")] {
+                zeroos_macros::asm_block!(
+                    "csrrw tp, mscratch, tp",
+                    "bnez tp, .Lsave_context",
 
-    #[unsafe(naked)]
-    #[no_mangle]
-    /// # Safety
-    /// `regs` must point to a valid `PtRegs` for the current trap context.
-    pub unsafe extern "C" fn restore_regs(regs: *mut PtRegs) -> ! {
-        asm_block!(
-            "mv s0, a0",
-            load!(t0, mepc, s0),
-            load!(t1, mstatus, s0),
-            "csrw mepc, t0",
-            "csrw mstatus, t1",
-            load!(ra, ra, s0),
-            load!(gp, gp, s0),
-            load!(tp, tp, s0),
-            load!(t0, t0, s0),
-            load!(t1, t1, s0),
-            load!(t2, t2, s0),
-            load!(s1, s1, s0),
-            load!(a0, a0, s0),
-            load!(a1, a1, s0),
-            load!(a2, a2, s0),
-            load!(a3, a3, s0),
-            load!(a4, a4, s0),
-            load!(a5, a5, s0),
-            load!(a6, a6, s0),
-            load!(a7, a7, s0),
-            load!(s2, s2, s0),
-            load!(s3, s3, s0),
-            load!(s4, s4, s0),
-            load!(s5, s5, s0),
-            load!(s6, s6, s0),
-            load!(s7, s7, s0),
-            load!(s8, s8, s0),
-            load!(s9, s9, s0),
-            load!(s10, s10, s0),
-            load!(s11, s11, s0),
-            load!(t3, t3, s0),
-            load!(t4, t4, s0),
-            load!(t5, t5, s0),
-            load!(t6, t6, s0),
-            load!(sp, sp, s0),
-            load!(s0, s0, s0),
-            "mret",
-        );
-    }
+                        ".Lrestore_kernel_tpsp:",
+                        "csrr tp, mscratch",
+                        store!(t6, {ThreadAnchor.stash0}(tp) @k),
+                        "li t6, 1",
+                        store!(sp, {ThreadAnchor.kernel_sp}(tp)),
+                        "j .Lcommon_save_context",
 
-    #[unsafe(naked)]
-    #[no_mangle]
-    /// # Safety
-    /// Trap entrypoint; must only be invoked by the CPU trap vector with a valid trap context.
-    pub unsafe extern "C" fn _default_trap_handler() {
-        asm_block!(
+                        ".Lsave_context:",
+                        store!(t6, {ThreadAnchor.stash0}(tp) @u),
+                        "li t6, 0",
 
-            "csrw mscratch, ra",
-            "call {save_regs}",
-            "mv s0, a0",
-            "call {trap_handler}",
-            "mv a0, s0",
-            "tail {restore_regs}",
-            save_regs = sym save_regs,
-            restore_regs = sym restore_regs,
-            trap_handler = sym crate::trap_handler,
-        );
+                        ".Lcommon_save_context:",
+                        store!(sp, {ThreadAnchor.user_sp}(tp)),
+                        load!(sp, {ThreadAnchor.kernel_sp}(tp)),
+                        "addi sp, sp, -{FRAME_SIZE}",
+
+                    store!(ra, {TrapFrame}(sp)),
+                    store!(gp, {TrapFrame}(sp)),
+                    store!(t0, {TrapFrame}(sp)),
+                    store!(t1, {TrapFrame}(sp)),
+                    store!(t2, {TrapFrame}(sp)),
+                    store!(s0, {TrapFrame}(sp)),
+                    store!(s1, {TrapFrame}(sp)),
+                    store!(a0, {TrapFrame}(sp)),
+                    store!(a1, {TrapFrame}(sp)),
+                    store!(a2, {TrapFrame}(sp)),
+                    store!(a3, {TrapFrame}(sp)),
+                    store!(a4, {TrapFrame}(sp)),
+                    store!(a5, {TrapFrame}(sp)),
+                    store!(a6, {TrapFrame}(sp)),
+                    store!(a7, {TrapFrame}(sp)),
+                    store!(s2, {TrapFrame}(sp)),
+                    store!(s3, {TrapFrame}(sp)),
+                    store!(s4, {TrapFrame}(sp)),
+                    store!(s5, {TrapFrame}(sp)),
+                    store!(s6, {TrapFrame}(sp)),
+                    store!(s7, {TrapFrame}(sp)),
+                    store!(s8, {TrapFrame}(sp)),
+                    store!(s9, {TrapFrame}(sp)),
+                    store!(s10, {TrapFrame}(sp)),
+                    store!(s11, {TrapFrame}(sp)),
+                    store!(t3, {TrapFrame}(sp)),
+                    store!(t4, {TrapFrame}(sp)),
+                    store!(t5, {TrapFrame}(sp)),
+
+                        store!(t6, {TrapFrame.from_kernel}(sp)),
+
+                        load!(t6, {ThreadAnchor.stash0}(tp) @restore),
+                        store!(t6, {TrapFrame}(sp)),
+
+                        load!(s0, {ThreadAnchor.user_sp}(tp)),
+                        "csrr s1, mstatus",
+                        "csrr s2, mepc",
+                        "csrr s3, mtval",
+                        "csrr s4, mcause",
+                        "csrr s5, mscratch",
+                        store!(s0, {TrapFrame.sp}(sp)),
+                        store!(s1, {TrapFrame.mstatus}(sp)),
+                        store!(s2, {TrapFrame.mepc}(sp)),
+                        store!(s3, {TrapFrame.mtval}(sp)),
+                        store!(s4, {TrapFrame.mcause}(sp)),
+                        store!(s5, {TrapFrame.tp}(sp)),
+
+                        "csrw mscratch, x0",
+
+                        "mv a0, sp",
+                        "call {trap_handler}",
+                        "j ret_from_exception",
+
+                        "ret_from_exception:",
+                        load!(t6, {TrapFrame.from_kernel}(sp)),
+                        "bnez t6, 1f",
+
+                        "addi s0, sp, {FRAME_SIZE}",
+                        store!(s0, {ThreadAnchor.kernel_sp}(tp)),
+                        "csrw mscratch, tp",
+
+                    "1:",
+                    load!(a0, {TrapFrame.mstatus}(sp)),
+                    load!(a2, {TrapFrame.mepc}(sp)),
+                    "csrw mstatus, a0",
+                    "csrw mepc, a2",
+
+                    load!(ra, {TrapFrame}(sp)),
+                    load!(gp, {TrapFrame}(sp)),
+                    load!(tp, {TrapFrame}(sp)),
+                    load!(t0, {TrapFrame}(sp)),
+
+                    load!(t1, {TrapFrame}(sp)),
+                    load!(t2, {TrapFrame}(sp)),
+                    load!(s0, {TrapFrame}(sp)),
+                    load!(s1, {TrapFrame}(sp)),
+                    load!(a0, {TrapFrame}(sp)),
+                    load!(a1, {TrapFrame}(sp)),
+                    load!(a2, {TrapFrame}(sp)),
+                    load!(a3, {TrapFrame}(sp)),
+                    load!(a4, {TrapFrame}(sp)),
+                    load!(a5, {TrapFrame}(sp)),
+                    load!(a6, {TrapFrame}(sp)),
+                    load!(a7, {TrapFrame}(sp)),
+                    load!(s2, {TrapFrame}(sp)),
+                    load!(s3, {TrapFrame}(sp)),
+                    load!(s4, {TrapFrame}(sp)),
+                    load!(s5, {TrapFrame}(sp)),
+                    load!(s6, {TrapFrame}(sp)),
+                    load!(s7, {TrapFrame}(sp)),
+                    load!(s8, {TrapFrame}(sp)),
+                    load!(s9, {TrapFrame}(sp)),
+                    load!(s10, {TrapFrame}(sp)),
+                    load!(s11, {TrapFrame}(sp)),
+                    load!(t3, {TrapFrame}(sp)),
+                    load!(t4, {TrapFrame}(sp)),
+                    load!(t5, {TrapFrame}(sp)),
+                    load!(t6, {TrapFrame}(sp)),
+
+                    load!(sp, {TrapFrame}(sp)),
+                    "mret",
+
+                    FRAME_SIZE = const core::mem::size_of::<TrapFrame>(),
+                    trap_handler = sym crate::trap_handler,
+                );
+            } else {
+                 core::arch::naked_asm!("unimp");
+            }
+        }
     }
 }
 
-pub use imp::{_default_trap_handler, restore_regs, save_regs};
+pub use imp::_default_trap_handler;
 
 global_asm!(
     ".align 2",
@@ -310,38 +313,3 @@ global_asm!(
     "j {default}",
     default = sym imp::_default_trap_handler,
 );
-
-#[inline]
-pub fn decode_trap(mcause: usize) -> Trap {
-    let is_int = (mcause & (1 << (usize::BITS - 1))) != 0;
-    let code = mcause & !(1 << (usize::BITS - 1));
-    if is_int {
-        match code {
-            1 => Trap::Interrupt(Interrupt::SupervisorSoft),
-            3 => Trap::Interrupt(Interrupt::MachineSoft),
-            5 => Trap::Interrupt(Interrupt::SupervisorTimer),
-            7 => Trap::Interrupt(Interrupt::MachineTimer),
-            9 => Trap::Interrupt(Interrupt::SupervisorExternal),
-            11 => Trap::Interrupt(Interrupt::MachineExternal),
-            _ => Trap::Interrupt(Interrupt::Unknown),
-        }
-    } else {
-        match code {
-            0 => Trap::Exception(Exception::InstructionMisaligned),
-            1 => Trap::Exception(Exception::InstructionFault),
-            2 => Trap::Exception(Exception::IllegalInstruction),
-            3 => Trap::Exception(Exception::Breakpoint),
-            4 => Trap::Exception(Exception::LoadMisaligned),
-            5 => Trap::Exception(Exception::LoadFault),
-            6 => Trap::Exception(Exception::StoreMisaligned),
-            7 => Trap::Exception(Exception::StoreFault),
-            8 => Trap::Exception(Exception::UserEnvCall),
-            9 => Trap::Exception(Exception::SupervisorEnvCall),
-            11 => Trap::Exception(Exception::MachineEnvCall),
-            12 => Trap::Exception(Exception::InstructionPageFault),
-            13 => Trap::Exception(Exception::LoadPageFault),
-            15 => Trap::Exception(Exception::StorePageFault),
-            _ => Trap::Exception(Exception::Unknown),
-        }
-    }
-}

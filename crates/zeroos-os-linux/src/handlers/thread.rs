@@ -1,6 +1,5 @@
 use libc;
 
-use crate::handlers::HandlerContext;
 use foundation::kfn;
 
 pub fn sys_clone(
@@ -9,7 +8,6 @@ pub fn sys_clone(
     parent_tid: usize,
     tls: usize,
     child_tid: usize,
-    ctx: &HandlerContext,
 ) -> isize {
     if stack == 0 {
         return -(libc::EINVAL as isize);
@@ -74,26 +72,24 @@ pub fn sys_clone(
         0
     };
 
-    kfn::scheduler::spawn_thread(
+    kfn::scheduler::kspawn_thread(
         stack,
         tls_val,
         parent_tid_ptr,
         child_tid_ptr,
         clear_child_tid_ptr,
-        ctx.mepc,
-        ctx.frame_ptr,
     )
 }
 
 pub fn sys_exit(status: usize) -> isize {
-    kfn::scheduler::exit_current(status as i32)
+    kfn::scheduler::kexit_current(status as i32)
 }
 
 pub fn sys_exit_group(status: usize) -> isize {
-    kfn::scheduler::exit_current(status as i32)
+    kfn::scheduler::kexit_current(status as i32)
 }
 
-pub fn sys_futex(addr: usize, op: usize, val: usize, _ctx: &HandlerContext) -> isize {
+pub fn sys_futex(addr: usize, op: usize, val: usize) -> isize {
     if addr == 0 || !addr.is_multiple_of(core::mem::align_of::<i32>()) {
         return -(libc::EINVAL as isize);
     }
@@ -102,18 +98,18 @@ pub fn sys_futex(addr: usize, op: usize, val: usize, _ctx: &HandlerContext) -> i
 
     match cmd {
         libc::FUTEX_WAIT | libc::FUTEX_WAIT_BITSET => {
-            kfn::scheduler::wait_on_addr(addr, val as i32)
+            kfn::scheduler::kwait_on_addr(addr, val as i32)
         }
 
         libc::FUTEX_WAKE | libc::FUTEX_WAKE_BITSET => {
-            kfn::scheduler::wake_on_addr(addr, val) as isize
+            kfn::scheduler::kwake_on_addr(addr, val) as isize
         }
         _ => -(libc::EINVAL as isize),
     }
 }
 
-pub fn sys_sched_yield(_ctx: &HandlerContext) -> isize {
-    kfn::scheduler::sched_yield()
+pub fn sys_sched_yield() -> isize {
+    kfn::scheduler::ksched_yield()
 }
 
 pub fn sys_getpid() -> isize {
@@ -121,12 +117,12 @@ pub fn sys_getpid() -> isize {
 }
 
 pub fn sys_gettid() -> isize {
-    kfn::scheduler::current_tid() as isize
+    kfn::scheduler::kcurrent_tid() as isize
 }
 
 pub fn sys_set_tid_address(tidptr: usize) -> isize {
     if tidptr != 0 && !tidptr.is_multiple_of(core::mem::align_of::<i32>()) {
         return -(libc::EINVAL as isize);
     }
-    kfn::scheduler::set_clear_on_exit_addr(tidptr)
+    kfn::scheduler::kset_clear_on_exit_addr(tidptr)
 }

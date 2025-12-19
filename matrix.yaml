@@ -35,7 +35,7 @@ guest_targets: &guest_targets
 
 entries:
   - package: xtask
-    target: 
+    target:
       - *host_targets
 
   - package: htif
@@ -65,7 +65,7 @@ entries:
       - vfs
       - scheduler
       - random
-      - syscall
+      - trap
 
   - package: zeroos-arch-riscv
     target:
@@ -81,7 +81,7 @@ entries:
       - random
 
   - package: zeroos-runtime-nostd
-    target: 
+    target:
       - *targets_none_elf_imac
     features:
       - memory
@@ -247,4 +247,3 @@ entries:
     commands:
       build: >-
         cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std {features_flag} --quiet
-

@@ -14,19 +14,6 @@ pub mod thread;
 #[cfg(feature = "vfs")]
 pub mod vfs;
 
-#[derive(Debug, Clone, Copy)]
-pub struct HandlerContext {
-    pub mepc: usize,
-    pub frame_ptr: usize,
-}
-
-impl HandlerContext {
-    #[inline]
-    pub const fn new(mepc: usize, frame_ptr: usize) -> Self {
-        Self { mepc, frame_ptr }
-    }
-}
-
 #[inline]
 pub fn sys_unsupported() -> isize {
     -(libc::ENOSYS as isize)

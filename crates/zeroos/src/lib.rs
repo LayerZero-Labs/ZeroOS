@@ -48,9 +48,7 @@ pub mod arch {
     pub mod riscv {
         pub use arch_riscv::{boot, trap};
 
-        pub use arch_riscv::{
-            decode_trap, Exception, Trap, __bootstrap, _default_trap_handler, _start,
-        };
+        pub use arch_riscv::{Exception, Trap, __bootstrap, _default_trap_handler, _start};
 
         pub use arch_riscv::TrapFrame;
     }
@@ -110,6 +108,12 @@ pub mod rng {
 }
 
 pub fn initialize() {
+    #[cfg(feature = "arch-riscv")]
+    foundation::register_arch(arch_riscv::ARCH_OPS);
+
+    #[cfg(feature = "os-linux")]
+    foundation::register_trap(os_linux::TRAP_OPS);
+
     #[cfg(feature = "alloc-linked-list")]
     foundation::register_memory(allocator_linked_list::LINKED_LIST_ALLOCATOR_OPS);
 

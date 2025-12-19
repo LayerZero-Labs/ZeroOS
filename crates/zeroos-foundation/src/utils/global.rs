@@ -28,6 +28,11 @@ impl<T> GlobalOption<T> {
     }
 
     #[inline(always)]
+    pub fn with_some<R>(&self, f: impl FnOnce(&T) -> R) -> Option<R> {
+        self.0.with(|slot| slot.as_ref().map(f))
+    }
+
+    #[inline(always)]
     pub fn set(&self, value: T) {
         self.0.with_mut(|slot| *slot = Some(value));
     }

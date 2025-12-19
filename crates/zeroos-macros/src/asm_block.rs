@@ -24,6 +24,7 @@ macro_rules! asm_block {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __asm_block_collect {
+
     (
         @strings []
         @auto_operands []
@@ -307,9 +308,11 @@ macro_rules! __asm_block_collect {
 
 #[macro_export]
 macro_rules! define_register_helpers {
-    ($struct_type:path, $store_mnemonic:literal, $load_mnemonic:literal) => {
+    ($store_mnemonic:literal, $load_mnemonic:literal) => {
+        #[allow(unused_macros)]
         macro_rules! store {
-            ($r:ident @collector $state:tt) => {
+            // Explicit struct type, implicit field name == register name
+            ($struct_type:path, $r:ident @collector $state:tt) => {
                 paste::paste! {
                     ::zeroos_macros::__asm_block_collect!(
                         $state
@@ -324,22 +327,25 @@ macro_rules! define_register_helpers {
                 }
             };
 
-            ($r:ident, $f:ident @collector $state:tt) => {
+            // Explicit struct type, implicit field name == register name, explicit base
+            ($struct_type:path, $r:ident, $base:ident @collector $state:tt) => {
                 paste::paste! {
                     ::zeroos_macros::__asm_block_collect!(
                         $state
                         @new_lines [
                             concat!($store_mnemonic, " ", stringify!($r),
-                                    ", {", stringify!([<s_ $f>]), "}(sp)"),
+                                    ", {", stringify!([<s_ $r>]),
+                                    "}(", stringify!($base), ")"),
                         ]
                         @new_operands [
-                            [<s_ $f>] = const memoffset::offset_of!($struct_type, $f),
+                            [<s_ $r>] = const memoffset::offset_of!($struct_type, $r),
                         ]
                     )
                 }
             };
 
-            ($r:ident, $f:ident, $base:ident @collector $state:tt) => {
+            // Explicit struct type + explicit field name + explicit base
+            ($struct_type:path, $r:ident, $f:ident, $base:ident @collector $state:tt) => {
                 paste::paste! {
                     ::zeroos_macros::__asm_block_collect!(
                         $state
@@ -354,10 +360,131 @@ macro_rules! define_register_helpers {
                     )
                 }
             };
+
+            // Value-first, brace-wrapped field-access style:
+            // `store!(sp, {ThreadAnchor.user_sp}(tp))`
+            //
+            // We intentionally use `{Type.field}` to avoid `macro_rules!` restrictions
+            // around `$path` fragments followed by `.`.
+            //
+            // Optional operand tag:
+            // `store!(sp, {ThreadAnchor.user_sp}(tp) @tag)`
+            // This forces a unique operand name even if the same store is emitted twice
+            // in one `asm_block!` expansion.
+            //
+            // Shorthand when the struct field name matches the register name:
+            // `store!(gp, {TrapFrame}(sp))` == `store!(gp, {TrapFrame.gp}(sp))`
+            ($val:ident, { $struct_type:ident } ( $base:ident ) @ $tag:ident @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($store_mnemonic, " ", stringify!($val),
+                                    ", {", stringify!([<s_ $val _ $val _ $tag>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<s_ $val _ $val _ $tag>] = const memoffset::offset_of!($struct_type, $val),
+                        ]
+                    )
+                }
+            };
+            ($val:ident, { $struct_type:ident } ( $base:ident ) @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($store_mnemonic, " ", stringify!($val),
+                                    ", {", stringify!([<s_ $val _ $val>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<s_ $val _ $val>] = const memoffset::offset_of!($struct_type, $val),
+                        ]
+                    )
+                }
+            };
+            ($val:ident, { $struct_type:ident . $field:ident } ( $base:ident ) @ $tag:ident @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($store_mnemonic, " ", stringify!($val),
+                                    ", {", stringify!([<s_ $field _ $val _ $tag>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<s_ $field _ $val _ $tag>] = const memoffset::offset_of!($struct_type, $field),
+                        ]
+                    )
+                }
+            };
+            ($val:ident, { $struct_type:ident . $field:ident } ( $base:ident ) @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($store_mnemonic, " ", stringify!($val),
+                                    ", {", stringify!([<s_ $field _ $val>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<s_ $field _ $val>] = const memoffset::offset_of!($struct_type, $field),
+                        ]
+                    )
+                }
+            };
+
+            // Value-first, brace-wrapped indexed array field-access style:
+            // `store!(t0, {ThreadAnchor.scratch[0]}(tp))`
+            //
+            // Optional operand tag:
+            // `store!(t0, {ThreadAnchor.scratch[0]}(tp) @tag)`
+            ($val:ident, { $struct_type:ident . $field:ident [ $idx:literal ] } ( $base:ident ) @ $tag:ident @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($store_mnemonic, " ", stringify!($val),
+                                    ", {", stringify!([<s_ $field _ $idx _ $val _ $tag>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<s_ $field _ $idx _ $val _ $tag>] = const (
+                                memoffset::offset_of!($struct_type, $field)
+                                    + ($idx as usize) * ::core::mem::size_of::<usize>()
+                            ),
+                        ]
+                    )
+                }
+            };
+            ($val:ident, { $struct_type:ident . $field:ident [ $idx:literal ] } ( $base:ident ) @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($store_mnemonic, " ", stringify!($val),
+                                    ", {", stringify!([<s_ $field _ $idx _ $val>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<s_ $field _ $idx _ $val>] = const (
+                                memoffset::offset_of!($struct_type, $field)
+                                    + ($idx as usize) * ::core::mem::size_of::<usize>()
+                            ),
+                        ]
+                    )
+                }
+            };
+
+            // Note: no default struct type. Always pass the target struct explicitly:
+            // e.g. `store!(TrapFrame, t0, sp)` or `store!(TrapFrame, t0)`.
         }
 
+        #[allow(unused_macros)]
         macro_rules! load {
-            ($r:ident @collector $state:tt) => {
+            // Explicit struct type, implicit field name == register name
+            ($struct_type:path, $r:ident @collector $state:tt) => {
                 paste::paste! {
                     ::zeroos_macros::__asm_block_collect!(
                         $state
@@ -372,22 +499,25 @@ macro_rules! define_register_helpers {
                 }
             };
 
-            ($r:ident, $f:ident @collector $state:tt) => {
+            // Explicit struct type, implicit field name == register name, explicit base
+            ($struct_type:path, $r:ident, $base:ident @collector $state:tt) => {
                 paste::paste! {
                     ::zeroos_macros::__asm_block_collect!(
                         $state
                         @new_lines [
                             concat!($load_mnemonic, " ", stringify!($r),
-                                    ", {", stringify!([<l_ $f>]), "}(a0)"),
+                                    ", {", stringify!([<l_ $r>]),
+                                    "}(", stringify!($base), ")"),
                         ]
                         @new_operands [
-                            [<l_ $f>] = const memoffset::offset_of!($struct_type, $f),
+                            [<l_ $r>] = const memoffset::offset_of!($struct_type, $r),
                         ]
                     )
                 }
             };
 
-            ($r:ident, $f:ident, $base:ident @collector $state:tt) => {
+            // Explicit struct type + explicit field name + explicit base
+            ($struct_type:path, $r:ident, $f:ident, $base:ident @collector $state:tt) => {
                 paste::paste! {
                     ::zeroos_macros::__asm_block_collect!(
                         $state
@@ -402,6 +532,120 @@ macro_rules! define_register_helpers {
                     )
                 }
             };
+
+            // Value-first, brace-wrapped field-access style:
+            // `load!(t0, {ThreadAnchor.kstack_base}(tp))`
+            //
+            // Optional operand tag:
+            // `load!(t0, {ThreadAnchor.kstack_base}(tp) @tag)`
+            //
+            // Shorthand when the struct field name matches the destination register name:
+            // `load!(gp, {TrapFrame}(sp))` == `load!(gp, {TrapFrame.gp}(sp))`
+            ($dst:ident, { $struct_type:ident } ( $base:ident ) @ $tag:ident @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($load_mnemonic, " ", stringify!($dst),
+                                    ", {", stringify!([<l_ $dst _ $dst _ $tag>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<l_ $dst _ $dst _ $tag>] = const memoffset::offset_of!($struct_type, $dst),
+                        ]
+                    )
+                }
+            };
+            ($dst:ident, { $struct_type:ident } ( $base:ident ) @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($load_mnemonic, " ", stringify!($dst),
+                                    ", {", stringify!([<l_ $dst _ $dst>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<l_ $dst _ $dst>] = const memoffset::offset_of!($struct_type, $dst),
+                        ]
+                    )
+                }
+            };
+            ($dst:ident, { $struct_type:ident . $field:ident } ( $base:ident ) @ $tag:ident @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($load_mnemonic, " ", stringify!($dst),
+                                    ", {", stringify!([<l_ $field _ $dst _ $tag>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<l_ $field _ $dst _ $tag>] = const memoffset::offset_of!($struct_type, $field),
+                        ]
+                    )
+                }
+            };
+            ($dst:ident, { $struct_type:ident . $field:ident } ( $base:ident ) @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($load_mnemonic, " ", stringify!($dst),
+                                    ", {", stringify!([<l_ $field _ $dst>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<l_ $field _ $dst>] = const memoffset::offset_of!($struct_type, $field),
+                        ]
+                    )
+                }
+            };
+
+            // Value-first, brace-wrapped indexed array field-access style:
+            // `load!(t0, {ThreadAnchor.scratch[0]}(tp))`
+            //
+            // Optional operand tag:
+            // `load!(t0, {ThreadAnchor.scratch[0]}(tp) @tag)`
+            ($dst:ident, { $struct_type:ident . $field:ident [ $idx:literal ] } ( $base:ident ) @ $tag:ident @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($load_mnemonic, " ", stringify!($dst),
+                                    ", {", stringify!([<l_ $field _ $idx _ $dst _ $tag>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<l_ $field _ $idx _ $dst _ $tag>] = const (
+                                memoffset::offset_of!($struct_type, $field)
+                                    + ($idx as usize) * ::core::mem::size_of::<usize>()
+                            ),
+                        ]
+                    )
+                }
+            };
+            ($dst:ident, { $struct_type:ident . $field:ident [ $idx:literal ] } ( $base:ident ) @collector $state:tt) => {
+                paste::paste! {
+                    ::zeroos_macros::__asm_block_collect!(
+                        $state
+                        @new_lines [
+                            concat!($load_mnemonic, " ", stringify!($dst),
+                                    ", {", stringify!([<l_ $field _ $idx _ $dst>]),
+                                    "}(", stringify!($base), ")"),
+                        ]
+                        @new_operands [
+                            [<l_ $field _ $idx _ $dst>] = const (
+                                memoffset::offset_of!($struct_type, $field)
+                                    + ($idx as usize) * ::core::mem::size_of::<usize>()
+                            ),
+                        ]
+                    )
+                }
+            };
+
+            // Note: no default struct type. Always pass the target struct explicitly:
+            // e.g. `load!(TrapFrame, t0)` or `load!(TrapFrame, t0, a1)`.
         }
     };
 }

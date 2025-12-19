@@ -6,7 +6,7 @@ pub extern "C" fn _init() {}
 #[no_mangle]
 pub extern "C" fn _fini() {}
 
-/// 1. Build glibc stack layout (with glibc-specific auxiliary vectors)
+/// Build glibc stack layout (with glibc-specific auxiliary vectors)
 /// - Must never return
 /// # Safety
 /// Must only be entered by early boot code.

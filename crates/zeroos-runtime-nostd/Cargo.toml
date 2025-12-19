@@ -13,3 +13,4 @@ memory = ["foundation/memory"]
 
 [dependencies]
 foundation = { workspace = true }
+cfg-if = { workspace = true }

@@ -19,13 +19,9 @@ pub type VfsResult<T> = Result<T, isize>;
 #[derive(Clone, Copy)]
 pub struct FileOps {
     pub read: fn(file: *mut u8, buf: *mut u8, count: usize) -> isize,
-
     pub write: fn(file: *mut u8, buf: *const u8, count: usize) -> isize,
-
     pub release: fn(file: *mut u8) -> isize,
-
     pub llseek: fn(file: *mut u8, offset: isize, whence: i32) -> isize,
-
     pub ioctl: fn(file: *mut u8, request: usize, arg: usize) -> isize,
 }
 

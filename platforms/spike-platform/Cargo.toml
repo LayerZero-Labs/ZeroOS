@@ -50,3 +50,7 @@ random = ["zeroos/rng-lcg"]
 
 [target.'cfg(not(target_os = "none"))'.dependencies]
 libc = { workspace = true }
+
+[profile.release]
+lto = true
+codegen-units = 1

@@ -1,6 +1,6 @@
 extern crate zeroos;
 
-use foundation::kfn::arch as karch;
+use zeroos::arch::riscv::TrapFrame;
 
 use riscv::register::mcause::Exception;
 
@@ -16,10 +16,10 @@ fn mcause_code(mcause: usize) -> usize {
 }
 
 #[inline(always)]
-fn advance_mepc_for_breakpoint(regs: *mut u8) {
+fn advance_mepc_for_breakpoint(regs: *mut TrapFrame) {
     unsafe {
-        let pc = karch::ktrap_frame_get_pc(regs);
-        karch::ktrap_frame_set_pc(regs, pc.wrapping_add(instr_len(pc)));
+        let pc = (*regs).mepc;
+        (*regs).mepc = pc.wrapping_add(instr_len(pc));
     }
 }
 
@@ -37,7 +37,8 @@ fn instr_len(addr: usize) -> usize {
 /// `regs` must be a non-null pointer to a valid `TrapFrame` for the current CPU trap context.
 #[no_mangle]
 pub unsafe extern "C" fn trap_handler(regs: *mut u8) {
-    let mcause = unsafe { karch::ktrap_frame_get_cause(regs) };
+    let regs = regs as *mut TrapFrame;
+    let mcause = (*regs).mcause;
     if mcause_is_interrupt(mcause) {
         // Interrupt handling is disabled
         return;
@@ -48,21 +49,21 @@ pub unsafe extern "C" fn trap_handler(regs: *mut u8) {
         code if code == (Exception::UserEnvCall as usize)
             || code == (Exception::SupervisorEnvCall as usize)
             || code == (Exception::MachineEnvCall as usize) =>
-        unsafe {
-            let pc = karch::ktrap_frame_get_pc(regs);
-            karch::ktrap_frame_set_pc(regs, pc + 4);
+        {
+            let pc = (*regs).mepc;
+            (*regs).mepc = pc + 4;
 
             let ret = foundation::kfn::trap::ksyscall(
-                karch::ktrap_frame_get_arg(regs, 0),
-                karch::ktrap_frame_get_arg(regs, 1),
-                karch::ktrap_frame_get_arg(regs, 2),
-                karch::ktrap_frame_get_arg(regs, 3),
-                karch::ktrap_frame_get_arg(regs, 4),
-                karch::ktrap_frame_get_arg(regs, 5),
-                karch::ktrap_frame_get_nr(regs),
+                (*regs).a0,
+                (*regs).a1,
+                (*regs).a2,
+                (*regs).a3,
+                (*regs).a4,
+                (*regs).a5,
+                (*regs).a7,
             );
-            karch::ktrap_frame_set_retval(regs, ret as usize);
-        },
+            (*regs).a0 = ret as usize;
+        }
         code if code == (Exception::Breakpoint as usize) => {
             advance_mepc_for_breakpoint(regs);
         }

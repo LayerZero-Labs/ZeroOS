@@ -135,7 +135,7 @@ cfg_if! {
         ///
         /// # Safety
         /// `regs` must point to a valid trap frame.
-        #[inline]
+        #[inline(always)]
         pub unsafe fn ktrap_frame_get_pc(regs: *const u8) -> usize {
             (crate::KERNEL.arch.trap_frame_get_pc)(regs)
         }
@@ -144,7 +144,7 @@ cfg_if! {
         ///
         /// # Safety
         /// `regs` must point to a valid trap frame.
-        #[inline]
+        #[inline(always)]
         pub unsafe fn ktrap_frame_set_pc(regs: *mut u8, pc: usize) {
             (crate::KERNEL.arch.trap_frame_set_pc)(regs, pc)
         }
@@ -153,7 +153,7 @@ cfg_if! {
         ///
         /// # Safety
         /// `regs` must point to a valid trap frame.
-        #[inline]
+        #[inline(always)]
         pub unsafe fn ktrap_frame_get_nr(regs: *const u8) -> usize {
             (crate::KERNEL.arch.trap_frame_get_nr)(regs)
         }
@@ -162,7 +162,7 @@ cfg_if! {
         ///
         /// # Safety
         /// `regs` must point to a valid trap frame.
-        #[inline]
+        #[inline(always)]
         pub unsafe fn ktrap_frame_get_arg(regs: *const u8, idx: usize) -> usize {
             (crate::KERNEL.arch.trap_frame_get_arg)(regs, idx)
         }
@@ -171,7 +171,7 @@ cfg_if! {
         ///
         /// # Safety
         /// `regs` must point to a valid trap frame.
-        #[inline]
+        #[inline(always)]
         pub unsafe fn ktrap_frame_get_cause(regs: *const u8) -> usize {
             (crate::KERNEL.arch.trap_frame_get_cause)(regs)
         }
@@ -180,7 +180,7 @@ cfg_if! {
         ///
         /// # Safety
         /// `regs` must point to a valid trap frame.
-        #[inline]
+        #[inline(always)]
         pub unsafe fn ktrap_frame_get_fault_addr(regs: *const u8) -> usize {
             (crate::KERNEL.arch.trap_frame_get_fault_addr)(regs)
         }

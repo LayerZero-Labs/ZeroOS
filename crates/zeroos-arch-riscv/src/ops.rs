@@ -29,6 +29,7 @@ unsafe fn trap_frame_init(regs: *mut u8, user_sp: usize, user_tls: usize, pc: us
 
 /// # Safety
 /// `regs` must point to a valid `TrapFrame`.
+#[inline(always)]
 unsafe fn trap_frame_set_retval(regs: *mut u8, val: usize) {
     let r = &mut *(regs as *mut TrapFrame);
     r.a0 = val;
@@ -36,6 +37,7 @@ unsafe fn trap_frame_set_retval(regs: *mut u8, val: usize) {
 
 /// # Safety
 /// `regs` must point to a valid `TrapFrame`.
+#[inline(always)]
 unsafe fn trap_frame_set_sp(regs: *mut u8, sp: usize) {
     let r = &mut *(regs as *mut TrapFrame);
     r.sp = sp;
@@ -43,6 +45,7 @@ unsafe fn trap_frame_set_sp(regs: *mut u8, sp: usize) {
 
 /// # Safety
 /// `regs` must point to a valid `TrapFrame`.
+#[inline(always)]
 unsafe fn trap_frame_set_tp(regs: *mut u8, tp: usize) {
     let r = &mut *(regs as *mut TrapFrame);
     r.tp = tp;
@@ -50,17 +53,19 @@ unsafe fn trap_frame_set_tp(regs: *mut u8, tp: usize) {
 
 /// # Safety
 /// Must be called when `tp` contains a valid `ThreadAnchor` pointer.
+#[inline(always)]
 unsafe fn current_trap_frame() -> *mut u8 {
     // Kernel `tp` always points to the current `ThreadAnchor` in our trap/scheduler convention.
     let tp: usize;
-    core::arch::asm!("mv {0}, tp", out(reg) tp);
+    core::arch::asm!("mv {0}, tp", out(reg) tp, options(nomem, nostack, preserves_flags));
     let anchor = tp as *const ThreadAnchor;
-    let regs_addr = unsafe { foundation::kfn::thread::ktrap_frame_addr(anchor) };
+    let regs_addr = foundation::kfn::thread::ktrap_frame_addr(anchor);
     regs_addr as *mut u8
 }
 
 /// # Safety
 /// `regs` must point to a valid `TrapFrame`.
+#[inline(always)]
 unsafe fn trap_frame_get_pc(regs: *const u8) -> usize {
     let r = &*(regs as *const TrapFrame);
     r.mepc
@@ -68,6 +73,7 @@ unsafe fn trap_frame_get_pc(regs: *const u8) -> usize {
 
 /// # Safety
 /// `regs` must point to a valid `TrapFrame`.
+#[inline(always)]
 unsafe fn trap_frame_set_pc(regs: *mut u8, pc: usize) {
     let r = &mut *(regs as *mut TrapFrame);
     r.mepc = pc;
@@ -75,6 +81,7 @@ unsafe fn trap_frame_set_pc(regs: *mut u8, pc: usize) {
 
 /// # Safety
 /// `regs` must point to a valid `TrapFrame`.
+#[inline(always)]
 unsafe fn trap_frame_get_nr(regs: *const u8) -> usize {
     let r = &*(regs as *const TrapFrame);
     r.a7
@@ -82,6 +89,7 @@ unsafe fn trap_frame_get_nr(regs: *const u8) -> usize {
 
 /// # Safety
 /// `regs` must point to a valid `TrapFrame`.
+#[inline(always)]
 unsafe fn trap_frame_get_arg(regs: *const u8, idx: usize) -> usize {
     let r = &*(regs as *const TrapFrame);
     match idx {
@@ -97,6 +105,7 @@ unsafe fn trap_frame_get_arg(regs: *const u8, idx: usize) -> usize {
 
 /// # Safety
 /// `regs` must point to a valid `TrapFrame`.
+#[inline(always)]
 unsafe fn trap_frame_get_cause(regs: *const u8) -> usize {
     let r = &*(regs as *const TrapFrame);
     r.mcause
@@ -104,6 +113,7 @@ unsafe fn trap_frame_get_cause(regs: *const u8) -> usize {
 
 /// # Safety
 /// `regs` must point to a valid `TrapFrame`.
+#[inline(always)]
 unsafe fn trap_frame_get_fault_addr(regs: *const u8) -> usize {
     let r = &*(regs as *const TrapFrame);
     r.mtval

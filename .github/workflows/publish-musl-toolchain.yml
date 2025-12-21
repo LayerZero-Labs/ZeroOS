@@ -1,0 +1,238 @@
+name: Build and Publish musl toolchain
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create or update a GitHub release"
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  ZEROOS_PREFIX: ${{ github.workspace }}
+  ZEROOS_HOME: ${{ github.workspace }}/.zeroos-home
+  OUTPUT_DIR: /tmp/srv/zeroos-musl-toolchain-releases
+
+jobs:
+  build-musl-toolchain:
+    name: Build musl toolchain
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: Linux
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            platform: Linux
+            arch: aarch64
+          - os: macos-15-intel
+            platform: Darwin
+            arch: x86_64
+          - os: macos-15
+            platform: Darwin
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      # GitHub-hosted runners typically already have Rust, but `act` images often do not.
+      # Installing explicitly makes the workflow reproducible everywhere.
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
+        with:
+          toolchain: stable
+
+      - name: Install dependencies (Linux)
+        if: matrix.platform == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            ca-certificates \
+            curl \
+            git \
+            gawk \
+            bison \
+            flex \
+            texinfo \
+            patch \
+            xz-utils \
+            python3
+
+      - name: Install dependencies (macOS)
+        if: matrix.platform == 'Darwin'
+        run: |
+          brew install autoconf automake libtool pkg-config gmp mpfr libmpc gawk bison flex texinfo coreutils
+
+      - name: Build musl toolchain (riscv64-linux-musl)
+        env:
+          # Ensure `cargo-zeroos` installs to $HOME/.zeroos/musl (default), but isolate
+          # it within the runner workspace for clean packaging.
+          HOME: ${{ env.ZEROOS_HOME }}
+        run: |
+          mkdir -p "$HOME"
+          cargo run -p zeroos-build --bin cargo-zeroos -- zeroos build-musl
+
+      - name: Compute toolchain version and package
+        id: pkg
+        env:
+          HOME: ${{ env.ZEROOS_HOME }}
+          OUTDIR: ${{ env.OUTPUT_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # musl version is currently pinned in the build script and passed to musl-cross-make.
+          musl_ver=$(grep -Eo 'MUSL_VER=[0-9]+\.[0-9]+\.[0-9]+' \
+            crates/zeroos-build/src/files/musl-toolchain.sh \
+            | head -n1 \
+            | cut -d= -f2)
+
+          target=riscv64-linux-musl
+          # Toolchain layout (as printed by cargo-zeroos) is:
+          #   MUSL: ~/.zeroos/musl/<target>/lib
+          #   GCC:  ~/.zeroos/musl/lib/gcc/<target>/<gcc_ver>
+          gcc_base="$HOME/.zeroos/musl/lib/gcc/$target"
+          if [[ ! -d "$gcc_base" ]]; then
+            # Fallback for older/alternate layouts (keep this to avoid surprises).
+            gcc_base_alt="$HOME/.zeroos/musl/$target/lib/gcc/$target"
+            if [[ -d "$gcc_base_alt" ]]; then
+              gcc_base="$gcc_base_alt"
+            else
+              echo "::error::Expected GCC base directory not found. Tried:"
+              echo "  - $HOME/.zeroos/musl/lib/gcc/$target"
+              echo "  - $HOME/.zeroos/musl/$target/lib/gcc/$target"
+              find "$HOME/.zeroos/musl" -maxdepth 4 -type d | sed 's/^/  - /'
+              exit 1
+            fi
+          fi
+
+          gcc_ver=$(basename "$(find "$gcc_base" -mindepth 1 -maxdepth 1 -type d | head -n1)")
+          if [[ -z "${gcc_ver:-}" ]]; then
+            echo "::error::Could not determine GCC version under: $gcc_base"
+            ls -la "$gcc_base" || true
+            exit 1
+          fi
+
+          version="musl-${musl_ver}-gcc-${gcc_ver}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          mkdir -p "$OUTDIR"
+          tarball="$OUTDIR/zeroos-musl-toolchain-${version}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz"
+
+          # Package the whole `~/.zeroos/musl` tree so users can extract to `~`.
+          # This creates `~/.zeroos/musl/...` on extraction.
+          tar zcf "$tarball" -C "$HOME/.zeroos" musl
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4
+        with:
+          name: zeroos-musl-toolchain-${{ matrix.platform }}-${{ matrix.arch }}
+          path: ${{ steps.pkg.outputs.tarball }}
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    if: inputs.create_release
+    needs: build-musl-toolchain
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout empty branch (release tags point here)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          ref: empty-branch
+          fetch-depth: 1
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4
+        with:
+          path: /tmp/artifacts
+
+      - name: Get toolchain version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          cd /tmp/artifacts
+          mapfile -t tarballs < <(find . -name "*.tar.gz" | sort)
+          if [[ ${#tarballs[@]} -eq 0 ]]; then
+            echo "::error::No release artifacts found under /tmp/artifacts"
+            exit 1
+          fi
+
+          versions=()
+          for t in "${tarballs[@]}"; do
+            base=$(basename "$t")
+            if [[ "$base" =~ ^zeroos-musl-toolchain-(musl-[0-9]+\.[0-9]+\.[0-9]+-gcc-[0-9]+\.[0-9]+\.[0-9]+)- ]]; then
+              versions+=("${BASH_REMATCH[1]}")
+            else
+              echo "::error::Could not parse version from artifact filename: $t"
+              exit 1
+            fi
+          done
+
+          unique_version=$(printf "%s\n" "${versions[@]}" | sort -u)
+          if [[ $(printf "%s\n" "$unique_version" | wc -l) -ne 1 ]]; then
+            echo "::error::Artifacts disagree on version:"
+            printf "%s\n" "${tarballs[@]}" | sed 's/^/  - /'
+            exit 1
+          fi
+
+          echo "version=$unique_version" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag_name="musl-toolchain-${{ steps.version.outputs.version }}"
+          echo "tag=$tag_name" >> "$GITHUB_OUTPUT"
+
+          # If the tag already exists, reuse it (workflow re-run).
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag_name" >/dev/null 2>&1; then
+            echo "Tag '$tag_name' already exists on origin; reusing."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag_name" -m "Release musl toolchain ${{ steps.version.outputs.version }}" HEAD
+          git push origin "$tag_name"
+
+      - name: Create/Update GitHub Release
+        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          overwrite_files: true
+          body: |
+            ## ZeroOS musl toolchain (${{ steps.version.outputs.version }})
+
+            Pre-built cross toolchain installed under `~/.zeroos/musl`.
+
+            ### Contains
+            - musl + GCC cross toolchain for target `riscv64-linux-musl`
+
+            ### Install
+            ```bash
+            mkdir -p "$HOME"
+            tar -xzf zeroos-musl-toolchain-*-<platform>-<arch>.tar.gz -C "$HOME"
+            ls -la "$HOME/.zeroos/musl"
+            ```
+
+            Built from commit: ${{ github.sha }}
+          files: /tmp/artifacts/**/*.tar.gz
+          draft: false
+          prerelease: false

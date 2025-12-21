@@ -12,6 +12,24 @@
 set -ex
 set -o pipefail
 
+cpu_count() {
+  local n
+  n=$( (command -v nproc >/dev/null 2>&1 && nproc) || true )
+  if [ -n "${n:-}" ]; then
+    printf '%s\n' "$n"
+    return
+  fi
+
+  n=$( (command -v getconf >/dev/null 2>&1 && getconf _NPROCESSORS_ONLN) || true )
+  if [ -n "${n:-}" ]; then
+    printf '%s\n' "$n"
+    return
+  fi
+
+  n=$( (command -v sysctl >/dev/null 2>&1 && sysctl -n hw.ncpu) || true )
+  printf '%s\n' "${n:-1}"
+}
+
 hide_output() {
   set +x
   
@@ -293,7 +311,7 @@ cat <<'PATCH' > "${GCC_DIR}/9008-fix-macos-libcpp-ctype-conflict.patch"
  #define __NO_STRING_INLINES
 PATCH
 
-hide_output make -j$(nproc) TARGET=$TARGET MUSL_VER=1.2.3 LINUX_HEADERS_SITE=$LINUX_HEADERS_SITE LINUX_VER=$LINUX_VER GCC_CONFIG_FOR_TARGET="$GCC_CONFIG_FOR_TARGET"
+hide_output make -j"$(cpu_count)" TARGET=$TARGET MUSL_VER=1.2.3 LINUX_HEADERS_SITE=$LINUX_HEADERS_SITE LINUX_VER=$LINUX_VER GCC_CONFIG_FOR_TARGET="$GCC_CONFIG_FOR_TARGET"
 hide_output make install TARGET=$TARGET MUSL_VER=1.2.3 LINUX_HEADERS_SITE=$LINUX_HEADERS_SITE LINUX_VER=$LINUX_VER OUTPUT=$OUTPUT GCC_CONFIG_FOR_TARGET="$GCC_CONFIG_FOR_TARGET"
 
 printf '!<arch>\n' | tee $OUTPUT/$TARGET/lib/libunwind.a > /dev/null

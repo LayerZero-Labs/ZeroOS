@@ -54,5 +54,4 @@ The instruction counts below are derived from the RISC-V 64-bit implementation i
 
 Total fixed overhead per syscall: ~93 instructions.
 
-Note: This count excludes the actual logic of the system call itself and hardware-level cycles for context transitions.
 

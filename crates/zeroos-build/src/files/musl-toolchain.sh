@@ -75,6 +75,17 @@ shift
 # debuggers can't walk the stack, etc. Fixes #90103.
 export CFLAGS="-fPIC -g1 $CFLAGS"
 
+# Disable NLS (gettext/libintl). It's not required for a working musl toolchain,
+# and on macOS it can pick up host libintl headers (e.g. /usr/local/include),
+# causing build failures (e.g. `setlocale` macro conflicts).
+#
+# Note: musl-cross-make's Makefiles set COMMON_CONFIG internally, so exporting it
+# via the environment is not enough. We pass it as a make variable below.
+COMMON_CONFIG_FOR_BUILD="${COMMON_CONFIG:-}"
+if [[ "${COMMON_CONFIG_FOR_BUILD}" != *"--disable-nls"* ]]; then
+  COMMON_CONFIG_FOR_BUILD="${COMMON_CONFIG_FOR_BUILD} --disable-nls"
+fi
+
 # Create temporary directory for build
 WORKDIR="${WORKDIR:-.}"
 mkdir -p "$WORKDIR"
@@ -328,8 +339,8 @@ cat <<'PATCH' > "${GCC_DIR}/9008-fix-macos-libcpp-ctype-conflict.patch"
  #define __NO_STRING_INLINES
 PATCH
 
-hide_output make -j"$(cpu_count)" TARGET=$TARGET MUSL_VER=1.2.3 LINUX_HEADERS_SITE=$LINUX_HEADERS_SITE LINUX_VER=$LINUX_VER GCC_CONFIG_FOR_TARGET="$GCC_CONFIG_FOR_TARGET"
-hide_output make install TARGET=$TARGET MUSL_VER=1.2.3 LINUX_HEADERS_SITE=$LINUX_HEADERS_SITE LINUX_VER=$LINUX_VER OUTPUT=$OUTPUT GCC_CONFIG_FOR_TARGET="$GCC_CONFIG_FOR_TARGET"
+hide_output make -j"$(cpu_count)" TARGET=$TARGET MUSL_VER=1.2.3 LINUX_HEADERS_SITE=$LINUX_HEADERS_SITE LINUX_VER=$LINUX_VER GCC_CONFIG_FOR_TARGET="$GCC_CONFIG_FOR_TARGET" COMMON_CONFIG="$COMMON_CONFIG_FOR_BUILD"
+hide_output make install TARGET=$TARGET MUSL_VER=1.2.3 LINUX_HEADERS_SITE=$LINUX_HEADERS_SITE LINUX_VER=$LINUX_VER OUTPUT=$OUTPUT GCC_CONFIG_FOR_TARGET="$GCC_CONFIG_FOR_TARGET" COMMON_CONFIG="$COMMON_CONFIG_FOR_BUILD"
 
 printf '!<arch>\n' | tee $OUTPUT/$TARGET/lib/libunwind.a > /dev/null
 

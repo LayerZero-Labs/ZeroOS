@@ -109,6 +109,23 @@ cat <<'PATCH' > "${BINUTILS_DIR}/9001-fix-zlib-fdopen-macos.patch"
  #    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
 PATCH
 
+# Fix zlib's fdopen detection on macOS
+# Problem: zlib incorrectly detects macOS and disables fdopen, causing build failures
+# Solution: Only apply the old MACOS behavior for non-Apple compilers
+cat <<'PATCH' > "${GCC_DIR}/9005-fix-zlib-fdopen-macos.patch"
+--- gcc-9.4.0.orig/zlib/zutil.h   2019-09-09 21:19:45
++++ gcc-9.4.0/zlib/zutil.h        2025-11-13 23:06:51
+@@ -130,7 +130,7 @@
+ #  endif
+ #endif
+ 
+-#if defined(MACOS) || defined(TARGET_OS_MAC)
++#if defined(MACOS) || (defined(TARGET_OS_MAC) && !defined(__APPLE__))
+ #  define OS_CODE  7
+ #  ifndef Z_SOLO
+ #    if defined(__MWERKS__) && __dest_os != __be_os && __dest_os != __win32_os
+PATCH
+
 # Fix libctf inline functions causing linker errors on macOS
 # Problem: 'inline' without 'static' in header files causes undefined symbol errors
 #          on macOS when linking (e.g., "_bswap_16" not found)

@@ -116,6 +116,28 @@ fn ensure_dir(path: &Path) -> Result<(), String> {
     fs::create_dir_all(path).map_err(|e| format!("Failed to create dir {}: {}", path.display(), e))
 }
 
+fn github_token() -> Option<String> {
+    std::env::var("GITHUB_TOKEN")
+        .ok()
+        .or_else(|| std::env::var("ZEROOS_GITHUB_TOKEN").ok())
+        .filter(|s| !s.trim().is_empty())
+}
+
+fn add_github_api_headers(cmd: &mut Command) {
+    cmd.arg("-H")
+        .arg("Accept: application/vnd.github+json")
+        .arg("-H")
+        .arg("X-GitHub-Api-Version: 2022-11-28")
+        .arg("-H")
+        .arg("User-Agent: zeroos-build");
+
+    if let Some(token) = github_token() {
+        // Avoid GitHub API rate limits / anonymous restrictions on hosted runners.
+        cmd.arg("-H")
+            .arg(format!("Authorization: Bearer {}", token));
+    }
+}
+
 fn find_asset_download_url(
     repo: &str,
     tag: Option<&str>,
@@ -137,15 +159,18 @@ fn find_asset_download_url(
         .map_err(|e| format!("Failed to create temp file: {}", e))?;
     let tmp_path = tmp.path().to_path_buf();
 
-    run(Command::new("curl")
-        .arg("-fsSL")
-        .arg("-H")
-        .arg("Accept: application/vnd.github+json")
-        .arg("-H")
-        .arg("User-Agent: zeroos-build")
+    let mut cmd = Command::new("curl");
+    cmd.arg("-fsSL")
+        .arg("--retry")
+        .arg("5")
+        .arg("--retry-all-errors")
+        .arg("--retry-delay")
+        .arg("1")
         .arg("-o")
         .arg(&tmp_path)
-        .arg(&api_url))?;
+        .arg(&api_url);
+    add_github_api_headers(&mut cmd);
+    run(&mut cmd)?;
 
     let bytes = fs::read(&tmp_path).map_err(|e| {
         format!(
@@ -229,11 +254,17 @@ pub fn install_musl_toolchain(config: &InstallConfig) -> Result<ToolchainPaths, 
     let tmp_dir_path = tmp_dir.path().to_path_buf();
     let tarball = tmp_dir_path.join("toolchain.tar.gz");
 
-    run(Command::new("curl")
-        .arg("-fL")
+    let mut dl = Command::new("curl");
+    dl.arg("-fL")
+        .arg("--retry")
+        .arg("5")
+        .arg("--retry-all-errors")
+        .arg("--retry-delay")
+        .arg("1")
         .arg("-o")
         .arg(&tarball)
-        .arg(&url))?;
+        .arg(&url);
+    run(&mut dl)?;
 
     // Extract into temp, then move into place.
     run(Command::new("tar")

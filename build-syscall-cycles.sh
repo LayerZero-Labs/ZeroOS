@@ -12,7 +12,16 @@ cd "${ROOT}"
 
 # std mode only
 echo "Building syscall-cycles example in std mode ..."
-CARGO_PROFILE_RELEASE_DEBUG=2 CARGO_PROFILE_RELEASE_STRIP=none cargo spike build -p syscall-cycles --target "${TARGET_TRIPLE}" --mode std --quiet --features=std --profile "${PROFILE}"
+if [[ "${PROFILE}" = "release" ]]; then
+	# Keep release profile tuning explicit (avoid per-crate [profile.release] warnings).
+	CARGO_PROFILE_RELEASE_DEBUG=2 \
+	CARGO_PROFILE_RELEASE_STRIP=none \
+	CARGO_PROFILE_RELEASE_LTO=true \
+	CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
+	cargo spike build -p syscall-cycles --target "${TARGET_TRIPLE}" --mode std --quiet --features=std --profile "${PROFILE}"
+else
+	cargo spike build -p syscall-cycles --target "${TARGET_TRIPLE}" --mode std --quiet --features=std --profile "${PROFILE}"
+fi
 
 # Persist logs under target/ so they survive script exit and are easy to share/debug.
 LOG_DIR="${ROOT}/target/syscall-cycles-logs"

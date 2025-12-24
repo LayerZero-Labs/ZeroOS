@@ -5,11 +5,26 @@ runs:
   steps:
     - name: Install base packages
       run: |
-        sudo apt-get update
-        sudo apt-get install -y --no-install-recommends \
-          ca-certificates \
-          curl \
-          build-essential \
-          pkg-config \
-          jq
+        set -euo pipefail
+
+        if [[ "${RUNNER_OS:-}" == "Linux" ]]; then
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ca-certificates \
+            curl \
+            build-essential \
+            pkg-config \
+            jq
+          exit 0
+        fi
+
+        if [[ "${RUNNER_OS:-}" == "macOS" ]]; then
+          # GitHub-hosted macOS runners ship with most base tools, but jq/pkg-config
+          # are not guaranteed. Keep this minimal for parity with Linux CI.
+          brew install jq pkg-config
+          exit 0
+        fi
+
+        echo "Unsupported RUNNER_OS=${RUNNER_OS:-<unset>}" >&2
+        exit 1
       shell: bash

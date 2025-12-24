@@ -225,10 +225,17 @@ jobs:
             ### Contains
             - musl + GCC cross toolchain for target `riscv64-linux-musl`
 
+            ### Windows (WSL2)
+            Use the `Linux` artifacts inside your WSL2 distro (WSL2 runs Linux binaries).
+
             ### Install
             ```bash
-            mkdir -p "$HOME"
-            tar -xzf zeroos-musl-toolchain-*-<platform>-<arch>.tar.gz -C "$HOME"
+            # Option A (recommended): use the helper subcommand (handles host tuple + latest release).
+            cargo run -p zeroos-build --bin cargo-zeroos -- zeroos install-musl
+
+            # Option B: manual extraction (these tarballs contain a top-level `musl/` dir).
+            mkdir -p "$HOME/.zeroos"
+            tar -xzf zeroos-musl-toolchain-*-<platform>-<arch>.tar.gz -C "$HOME/.zeroos"
             ls -la "$HOME/.zeroos/musl"
             ```
 

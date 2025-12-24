@@ -204,11 +204,26 @@ fn build_command(args: SpikeBuildArgs) -> Result<()> {
     let fully = args.base.mode == StdMode::Std || args.base.fully;
 
     let toolchain_paths = if args.base.mode == StdMode::Std || fully {
-        Some(build::cmds::get_or_build_toolchain(
+        let tc_cfg = build::toolchain::ToolchainConfig::default();
+        let install_cfg = build::toolchain::InstallConfig::default();
+        let paths = match build::toolchain::get_or_install_toolchain(
             args.base.musl_lib_path.clone(),
             args.base.gcc_lib_path.clone(),
-            fully,
-        )?)
+            &tc_cfg,
+            &install_cfg,
+        ) {
+            Ok(p) => (p.musl_lib, p.gcc_lib),
+            Err(e) => {
+                eprintln!("Toolchain install failed: {}", e);
+                eprintln!("Falling back to building toolchain from source...");
+                build::cmds::get_or_build_toolchain(
+                    args.base.musl_lib_path.clone(),
+                    args.base.gcc_lib_path.clone(),
+                    fully,
+                )?
+            }
+        };
+        Some(paths)
     } else {
         None
     };

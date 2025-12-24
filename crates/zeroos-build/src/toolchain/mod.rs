@@ -1,8 +1,10 @@
 extern crate std;
 
 mod discovery;
+mod install;
 
 pub use discovery::{discover_toolchain, validate_toolchain_path, ToolchainPaths};
+pub use install::{get_or_install_toolchain, install_musl_toolchain, InstallConfig};
 
 use std::format;
 use std::path::{Path, PathBuf};

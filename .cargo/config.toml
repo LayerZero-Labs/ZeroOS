@@ -1,7 +1,7 @@
 [alias]
 xtask = "run --package xtask --"
 massage = "run --package xtask -- massage"
-matrix = "run --package xtask -- matrix --command"
+matrix = "run --package cargo-matrix -- --command"
 act = "run --package xtask -- act"
 
 zeroos = "run -q -p zeroos-build --bin cargo-zeroos -- zeroos"

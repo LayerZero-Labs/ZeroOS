@@ -26,12 +26,13 @@ pub fn run(args: MassageArgs) -> Result<(), Box<dyn std::error::Error>> {
             commands.len(),
             cmd
         );
-        crate::matrix::run(crate::matrix::MatrixArgs {
+        cargo_matrix::run(cargo_matrix::MatrixArgs {
             config: None,
             command: Some((*cmd).to_string()),
             packages: packages.clone(),
             verbose: args.verbose,
-        })?;
+        })
+        .map_err(|e| -> Box<dyn std::error::Error> { e.into() })?;
     }
 
     println!("[massage] done");

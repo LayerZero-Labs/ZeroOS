@@ -1,5 +1,7 @@
 // sh! command execution
 
+#![allow(dead_code)]
+
 use std::ffi::OsString;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};

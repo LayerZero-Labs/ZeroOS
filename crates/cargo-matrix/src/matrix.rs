@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 
 use clap::Args;
 
-use crate::sh::{ShOptions, StreamMode};
-
-#[derive(Args, Debug)]
+#[derive(Args, Debug, Clone)]
 pub struct MatrixArgs {
     /// Path to YAML config (defaults to `<workspace>/matrix.yaml`)
     #[arg(long)]
-    pub config: Option<std::path::PathBuf>,
+    pub config: Option<PathBuf>,
 
     /// Which command to run. This can be either:
     /// - a name from `commands:` (recommended), or
@@ -20,7 +20,7 @@ pub struct MatrixArgs {
 
     /// Only run matrix entries for these packages (repeatable).
     ///
-    /// Example: `xtask matrix -p zeroos -p spike-platform --command check`
+    /// Example: `cargo matrix --command check -p zeroos -p spike-platform`
     #[arg(short = 'p', long = "package")]
     pub packages: Vec<String>,
 
@@ -41,9 +41,7 @@ struct MatrixConfig {
 #[derive(serde::Deserialize)]
 #[serde(untagged)]
 enum Targets {
-    /// `target: riscv64gc-unknown-linux-musl`
     One(String),
-    /// `target: [ ... ]` (supports scalars and nested lists, so YAML aliases can expand cleanly)
     Many(Vec<TargetElem>),
 }
 
@@ -63,12 +61,6 @@ enum FeatureSpec {
 
 #[derive(serde::Deserialize)]
 struct MatrixEntry {
-    /// Per-entry overrides for named commands from the top-level `commands:` map.
-    ///
-    /// Example:
-    ///   command: build
-    ///   commands:
-    ///     build: cargo spike build --package {package} --target "{target}" --no-default-features {features_flag} --quiet
     #[serde(default)]
     commands: BTreeMap<String, String>,
     command: Option<String>,
@@ -78,19 +70,77 @@ struct MatrixEntry {
     features: Vec<FeatureSpec>,
 }
 
-fn load_config(path: &std::path::Path) -> Result<MatrixConfig, Box<dyn std::error::Error>> {
-    let bytes = std::fs::read(path)?;
-    Ok(serde_yaml::from_slice(&bytes)?)
+fn load_config(path: &Path) -> Result<MatrixConfig, String> {
+    let bytes =
+        std::fs::read(path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+    serde_yaml::from_slice(&bytes).map_err(|e| format!("Invalid YAML {}: {}", path.display(), e))
 }
 
-struct Step {
-    name: String,
-    cmd: String,
+fn find_upwards(start: &Path, filename: &str) -> Option<PathBuf> {
+    let mut dir = if start.is_dir() {
+        start.to_path_buf()
+    } else {
+        start.parent().unwrap_or(start).to_path_buf()
+    };
+
+    loop {
+        let candidate = dir.join(filename);
+        if candidate.exists() {
+            return Some(candidate);
+        }
+
+        if !dir.pop() {
+            break;
+        }
+    }
+
+    None
+}
+
+fn workspace_root() -> Result<PathBuf, String> {
+    let start = std::env::current_dir().map_err(|e| format!("Failed to get cwd: {}", e))?;
+
+    // Prefer matrix.yaml as a marker (works for external repos without Cargo.lock).
+    if let Some(m) = find_upwards(&start, "matrix.yaml") {
+        return Ok(m.parent().unwrap_or(m.as_path()).to_path_buf());
+    }
+
+    // Fallback to Cargo.lock for compatibility with workspaces.
+    let lock = find_upwards(&start, "Cargo.lock").ok_or_else(|| {
+        "matrix.yaml/Cargo.lock not found (run from within a repo or pass --config)".to_string()
+    })?;
+    Ok(lock.parent().unwrap_or(lock.as_path()).to_path_buf())
+}
+
+fn host_target(workspace: &Path) -> Result<String, String> {
+    let out = Command::new("rustc")
+        .arg("-vV")
+        .current_dir(workspace)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| format!("Failed to run rustc -vV: {}", e))?;
+
+    if !out.status.success() {
+        return Err(format!(
+            "rustc -vV failed (exit={:?}): {}",
+            out.status.code(),
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+
+    let s = String::from_utf8_lossy(&out.stdout);
+    for line in s.lines() {
+        if let Some(rest) = line.strip_prefix("host:") {
+            return Ok(rest.trim().to_string());
+        }
+    }
+    Err("rustc -vV output missing host line".to_string())
 }
 
 fn render_template(
     template: &str,
-    workspace: &std::path::Path,
+    workspace: &Path,
     package: &str,
     target: &str,
     features: &str,
@@ -104,50 +154,75 @@ fn render_template(
         .replace("{features_flag}", features_flag)
 }
 
-fn host_target() -> Result<String, Box<dyn std::error::Error>> {
-    // `rustc -vV` prints a line like: `host: x86_64-unknown-linux-gnu`
-    let opts = crate::sh::ShOptions {
-        stdout: crate::sh::StreamMode::Pipe,
-        stderr: crate::sh::StreamMode::Pipe,
-        quiet: true,
-        ..Default::default()
-    };
-    let out = crate::sh!(options(opts), "rustc", ["-vV"])?;
-    let s = out.1;
-    for line in s.lines() {
-        if let Some(rest) = line.strip_prefix("host:") {
-            return Ok(rest.trim().to_string());
-        }
+fn run_shell(cmd: &str, cwd: &Path, verbose: bool) -> Result<(), String> {
+    if verbose {
+        println!("$ {}", cmd);
     }
-    Err("rustc -vV output missing host line".into())
+
+    let status = if cfg!(windows) {
+        // Best-effort: allow running under Windows if a POSIX shell is available.
+        if Command::new("sh")
+            .arg("-c")
+            .arg("true")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok()
+        {
+            Command::new("sh")
+                .arg("-c")
+                .arg(cmd)
+                .current_dir(cwd)
+                .status()
+        } else {
+            Command::new("cmd")
+                .args(["/C", cmd])
+                .current_dir(cwd)
+                .status()
+        }
+    } else {
+        Command::new("sh")
+            .arg("-c")
+            .arg(cmd)
+            .current_dir(cwd)
+            .status()
+    }
+    .map_err(|e| format!("Failed to execute shell: {}", e))?;
+
+    if !status.success() {
+        return Err(format!(
+            "Command failed (exit={:?}): {}",
+            status.code(),
+            cmd
+        ));
+    }
+    Ok(())
 }
 
-pub fn run(args: MatrixArgs) -> Result<(), Box<dyn std::error::Error>> {
-    let workspace = crate::findup::workspace_root()?;
+struct Step {
+    name: String,
+    cmd: String,
+}
+
+pub fn run(args: MatrixArgs) -> Result<(), String> {
+    let command = args.command.clone();
+
+    let workspace = workspace_root()?;
     let config_path = args
         .config
         .clone()
         .unwrap_or_else(|| workspace.join("matrix.yaml"));
     let cfg = load_config(&config_path)?;
 
-    let opts = ShOptions {
-        stdout: StreamMode::Inherit,
-        stderr: StreamMode::Inherit,
-        cwd: Some(workspace.clone()),
-        quiet: true,
-    };
+    let host = host_target(&workspace)?;
 
     let mut steps: Vec<Step> = Vec::new();
-
     for (i, cmd) in cfg.pre.iter().enumerate() {
         steps.push(Step {
             name: format!("pre:{}", i + 1),
             cmd: cmd.clone(),
         });
     }
-
-    let default_cmd_name = args.command.clone();
-    let host = host_target()?;
 
     for entry in &cfg.entries {
         if !args.packages.is_empty() && !args.packages.iter().any(|p| p == &entry.package) {
@@ -157,13 +232,9 @@ pub fn run(args: MatrixArgs) -> Result<(), Box<dyn std::error::Error>> {
         let cmd_name = entry
             .command
             .as_ref()
-            .or(default_cmd_name.as_ref())
-            .ok_or_else(|| -> Box<dyn std::error::Error> {
-                "no command selected (pass --command <name> or set `command:` per entry)".into()
-            })?;
-        // Command can be either:
-        // - a key into `commands:` (recommended), optionally overridden by entry.commands, or
-        // - an inline command template string.
+            .or(command.as_ref())
+            .ok_or_else(|| "no command selected (pass --command <name>)".to_string())?;
+
         let template: &str = entry
             .commands
             .get(cmd_name)
@@ -257,21 +328,8 @@ pub fn run(args: MatrixArgs) -> Result<(), Box<dyn std::error::Error>> {
 
     for (i, step) in steps.iter().enumerate() {
         println!("[{}/{}] {}", i + 1, steps.len(), step.name);
-        if args.verbose {
-            println!("{}", step.cmd);
-        }
-        let out = crate::sh!(options(opts.clone()), &step.cmd)?;
-        if args.verbose {
-            debug_assert!(out.0.success());
-            if !out.1.is_empty() {
-                print!("{}", out.1);
-            }
-            if !out.2.is_empty() {
-                eprint!("{}", out.2);
-            }
-        }
+        run_shell(&step.cmd, &workspace, args.verbose)?;
     }
 
-    println!("[matrix] done");
     Ok(())
 }

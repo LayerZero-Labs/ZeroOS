@@ -56,7 +56,7 @@ jobs:
 
       - name: Run clippy
         run: |
-          cargo matrix clippy
+          cargo run -p cargo-matrix -- --command clippy
 
   check:
     name: Check (${{ matrix.os }})
@@ -77,7 +77,7 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - name: Check
         run: |
-          cargo matrix check
+          cargo run -p cargo-matrix -- --command check
 
   build:
     name: Build (${{ matrix.os }})
@@ -99,7 +99,7 @@ jobs:
 
       - name: Build Release
         run: |
-          cargo matrix build
+          cargo run -p cargo-matrix -- --command build
 
   basics-checks:
     name: Basic checks

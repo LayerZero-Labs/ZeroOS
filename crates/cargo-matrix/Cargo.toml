@@ -1,0 +1,19 @@
+[package]
+name = "cargo-matrix"
+version.workspace = true
+edition.workspace = true
+description = "Run a curated matrix of cargo commands (targets/features) from a YAML config"
+
+[[bin]]
+name = "cargo-matrix"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+clap.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+tempfile.workspace = true
+

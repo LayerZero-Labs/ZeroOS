@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "xtask",
+  "crates/cargo-matrix",
   "crates/htif",
   "crates/zeroos",
   "crates/zeroos-foundation",
@@ -40,6 +41,7 @@ description = "ZeroOS"
 
 [workspace.dependencies]
 # Internal workspace crates
+cargo-matrix = { path = "crates/cargo-matrix" }
 zeroos = { path = "crates/zeroos" }
 foundation = { path = "crates/zeroos-foundation", package = "zeroos-foundation" }
 debug = { path = "crates/zeroos-debug", package = "zeroos-debug" }

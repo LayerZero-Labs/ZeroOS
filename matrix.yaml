@@ -38,6 +38,10 @@ entries:
     target:
       - *host_targets
 
+  - package: cargo-matrix
+    target:
+      - *host_targets
+
   - package: htif
     target:
       - *targets_none_elf_imac

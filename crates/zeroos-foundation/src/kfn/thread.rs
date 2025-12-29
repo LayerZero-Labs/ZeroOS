@@ -1,14 +1,15 @@
-//! Low-level per-thread/kernel-stack primitives.
-//!
-//! Independent of the scheduler API; usable for trap entry/exit without a scheduler.
+//! Per-thread/kernel-stack primitives.
 
 /// Per-thread state stored at the base of the kernel stack.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ThreadAnchor {
-    pub kstack_base: usize, // Stack base (low address)
-    pub kstack_size: usize, // Stack size in bytes
-    pub task_ptr: usize,    // Opaque pointer to TCB (optional)
+    /// Kernel stack base (low address).
+    pub kstack_base: usize,
+    /// Kernel stack size in bytes.
+    pub kstack_size: usize,
+    /// Optional pointer to a scheduler/TCB structure.
+    pub task_ptr: usize,
 
     /// Current/last saved kernel stack pointer.
     /// Tracks the kernel stack position across trap entry/exit and context switches.
@@ -22,13 +23,59 @@ pub struct ThreadAnchor {
     pub stash0: usize,
     pub stash1: usize,
     pub stash2: usize,
+
+    /// Cached trap-frame address (computed at kstack allocation).
+    pub trap_frame_addr: usize,
 }
 
-/// Allocate a kernel stack and initialize a `ThreadAnchor` at its base.
+#[inline(always)]
+fn compute_trap_frame_addr(
+    kstack_base: usize,
+    kstack_size: usize,
+    trap_frame_size: usize,
+    trap_frame_align: usize,
+) -> usize {
+    let top = match kstack_base.checked_add(kstack_size) {
+        Some(v) => v,
+        None => {
+            debug::writeln!(
+                "[THREAD] compute_trap_frame_addr overflow: kstack_base=0x{:x} kstack_size=0x{:x}",
+                kstack_base,
+                kstack_size
+            );
+            panic!("compute_trap_frame_addr: kstack_base + kstack_size overflow");
+        }
+    };
+
+    let tf_size = trap_frame_size;
+    let tf_align = trap_frame_align;
+    assert!(tf_size != 0);
+    assert!(tf_align.is_power_of_two());
+
+    match top.checked_sub(tf_size) {
+        Some(v) => v & !(tf_align - 1),
+        None => {
+            debug::writeln!(
+                "[THREAD] compute_trap_frame_addr underflow: top=0x{:x} tf_size=0x{:x} kstack_base=0x{:x} kstack_size=0x{:x}",
+                top,
+                tf_size,
+                kstack_base,
+                kstack_size
+            );
+            panic!("compute_trap_frame_addr: kstack_top < trap_frame_size");
+        }
+    }
+}
+
+/// Allocate a kernel stack and initialize its `ThreadAnchor`.
 ///
-/// Returns a pointer to the anchor (stack base), or null on failure.
+/// Returns the anchor pointer (stack base), or null on failure.
 #[inline]
-pub fn kalloc_kstack(kstack_size: usize) -> *mut ThreadAnchor {
+pub fn kalloc_kstack(
+    kstack_size: usize,
+    trap_frame_size: usize,
+    trap_frame_align: usize,
+) -> *mut ThreadAnchor {
     assert!(kstack_size.is_power_of_two());
 
     let base = crate::kfn::memory::kmalloc_aligned(kstack_size, kstack_size);
@@ -36,6 +83,12 @@ pub fn kalloc_kstack(kstack_size: usize) -> *mut ThreadAnchor {
         return core::ptr::null_mut();
     }
     let anchor_ptr = base as *mut ThreadAnchor;
+    let tf_addr = compute_trap_frame_addr(
+        base as usize,
+        kstack_size,
+        trap_frame_size,
+        trap_frame_align,
+    );
     unsafe {
         core::ptr::write(
             anchor_ptr,
@@ -48,6 +101,7 @@ pub fn kalloc_kstack(kstack_size: usize) -> *mut ThreadAnchor {
                 stash0: 0,
                 stash1: 0,
                 stash2: 0,
+                trap_frame_addr: tf_addr,
             },
         );
     }
@@ -62,11 +116,22 @@ pub fn kalloc_kstack(kstack_size: usize) -> *mut ThreadAnchor {
 pub unsafe fn ktrap_frame_addr(anchor_ptr: *const ThreadAnchor) -> usize {
     assert!(!anchor_ptr.is_null());
     let a = &*anchor_ptr;
-    let top = a.kstack_base + a.kstack_size;
-    let tf_size = crate::kfn::arch::ktrap_frame_size();
-    let tf_align = crate::kfn::arch::ktrap_frame_align();
-    assert!(tf_size != 0);
-    assert!(tf_align.is_power_of_two());
-    let tf = top - tf_size;
-    tf & !(tf_align - 1)
+
+    let tf = a.trap_frame_addr;
+    if tf == 0 {
+        debug::writeln!(
+            "[THREAD] ktrap_frame_addr missing: anchor=0x{:x} kstack_base=0x{:x} kstack_size=0x{:x}",
+            anchor_ptr as usize,
+            a.kstack_base,
+            a.kstack_size
+        );
+        panic!("ktrap_frame_addr: trap_frame_addr is 0");
+    }
+
+    debug_assert!({
+        let top = a.kstack_base.wrapping_add(a.kstack_size);
+        tf >= a.kstack_base && tf <= top
+    });
+
+    tf
 }

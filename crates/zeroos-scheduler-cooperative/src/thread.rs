@@ -48,7 +48,11 @@ pub const KSTACK_SIZE: usize = 16 * 1024; // 16KB kernel stack
 impl ThreadControlBlock {
     pub fn new(tid: Tid, user_stack_top: usize, user_tls: usize, initial_pc: usize) -> Self {
         // Allocate kernel stack (aligned) and initialize ThreadAnchor at its base
-        let anchor_ptr = foundation::kfn::scheduler::kalloc_kstack(KSTACK_SIZE);
+        let anchor_ptr = foundation::kfn::scheduler::kalloc_kstack(
+            KSTACK_SIZE,
+            karch::ktrap_frame_size(),
+            karch::ktrap_frame_align(),
+        );
         if anchor_ptr.is_null() {
             panic!("kalloc_kstack(KSTACK_SIZE) failed");
         }

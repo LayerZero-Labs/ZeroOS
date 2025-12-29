@@ -36,7 +36,11 @@ impl Scheduler {
     }
 
     pub fn init() -> usize {
-        let anchor_ptr = foundation::kfn::scheduler::kalloc_kstack(crate::thread::KSTACK_SIZE);
+        let anchor_ptr = foundation::kfn::scheduler::kalloc_kstack(
+            crate::thread::KSTACK_SIZE,
+            karch::ktrap_frame_size(),
+            karch::ktrap_frame_align(),
+        );
         if anchor_ptr.is_null() {
             panic!("kalloc_kstack(KSTACK_SIZE) failed for boot thread");
         }

@@ -1,4 +1,5 @@
 mod act;
+mod check_workspace;
 mod findup;
 mod massage;
 mod sh;
@@ -27,6 +28,9 @@ enum Command {
     /// Measure syscall instruction-count "cost" using Spike commit logs.
     #[command(name = "spike-syscall-instcount")]
     SpikeSyscallInstCount(spike_syscall_instcount::SpikeSyscallInstCountArgs),
+    /// Check workspace consistency (versions, dependencies)
+    #[command(name = "check-workspace")]
+    CheckWorkspace(check_workspace::CheckWorkspaceArgs),
 }
 
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
@@ -35,6 +39,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         Command::Matrix(args) => cargo_matrix::run(args).map_err(|e| e.into()),
         Command::Act(args) => act::run(args),
         Command::SpikeSyscallInstCount(args) => spike_syscall_instcount::run(args),
+        Command::CheckWorkspace(args) => check_workspace::run(args).map_err(|e| e.into()),
     }
 }
 

@@ -66,7 +66,6 @@ rng = { path = "crates/zeroos-rng", package = "zeroos-rng", default-features = f
 build = { path = "crates/zeroos-build", package = "zeroos-build" }
 
 spike-platform = { path = "platforms/spike-platform", default-features = false }
-spike-build = { path = "platforms/spike-build", default-features = false }
 platform = { path = "platforms/platform", default-features = false }
 
 htif = { path = "crates/htif", default-features = false }
@@ -78,7 +77,6 @@ libc = "0.2"
 linked_list_allocator = "0.10"
 buddy_system_allocator = "0.11"
 memoffset = "0.9"
-const_format = "0.2"
 derive_builder = "0.20.0"
 clap-cargo = "0.18"
 serde_yaml = "0.9"
@@ -106,6 +104,9 @@ env_logger = "0.11"
 dirs = "5.0"
 tempfile = "3.10"
 paste = "1.0"
+walkdir = "2.5"
+toml = "0.8"
+cargo_toml = "0.22.3"
 
 # Parallelism
 rayon = "1.10"

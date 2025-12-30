@@ -1,5 +1,6 @@
 [package]
 name = "spike-build"
+publish = false
 version = "0.2.0"
 edition.workspace = true
 description = "Build tool for Spike simulator - independent of spike-platform"

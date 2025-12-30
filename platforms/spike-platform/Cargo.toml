@@ -1,5 +1,6 @@
 [package]
 name = "spike-platform"
+publish = false
 version = "0.2.0"
 edition.workspace = true
 description = "Spike simulator platform for ZeroOS"

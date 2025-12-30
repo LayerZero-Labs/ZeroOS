@@ -1,0 +1,111 @@
+[workspace]
+allow_dirty = false
+release = false
+
+[[package]]
+name = "cargo-matrix"
+release = true
+
+[[package]]
+name = "htif"
+release = true
+
+[[package]]
+name = "zeroos"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-foundation"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-debug"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-macros"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-arch-riscv"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-scheduler-cooperative"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-os-linux"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-runtime-musl"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-runtime-gnu"
+version_group = "zeroos"
+release = false
+
+[[package]]
+name = "zeroos-runtime-nostd"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-build"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-allocator-bump"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-allocator-linked-list"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-allocator-buddy"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-vfs-core"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-device-console"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-device-null"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-device-zero"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-device-urandom"
+version_group = "zeroos"
+release = true
+
+[[package]]
+name = "zeroos-rng"
+version_group = "zeroos"
+release = true

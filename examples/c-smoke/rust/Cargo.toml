@@ -1,5 +1,6 @@
 [package]
 name = "c-staticlib"
+publish = false
 version.workspace = true
 edition.workspace = true
 

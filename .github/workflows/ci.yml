@@ -20,6 +20,23 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
+  check-workspace:
+    name: Check workspace conventions
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/install-base
+      - uses: ./.github/actions/setup-rust
+
+      - name: cargo xtask check-workspace
+        run: |
+          cargo xtask check-workspace
+
   format:
     name: Format
     runs-on: ubuntu-latest
@@ -103,7 +120,7 @@ jobs:
 
   basics-checks:
     name: Basic checks
-    needs: [format, lint, check]
+    needs: [check-workspace, format, lint, check]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:

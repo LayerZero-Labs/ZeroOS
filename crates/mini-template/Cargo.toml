@@ -1,8 +1,9 @@
 [package]
 name = "mini-template"
+publish = false
 version.workspace = true
 edition.workspace = true
-description = "Minimal, auditable template renderer for ZeroOS build-time scripts"
+description = "Minimal, auditable template renderer"
 
 [lib]
 name = "mini_template"

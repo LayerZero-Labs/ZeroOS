@@ -1,5 +1,6 @@
 [package]
 name = "zeroos-runtime-gnu"
+publish = false
 version.workspace = true
 edition.workspace = true
 description = "GNU libc (glibc) compatibility layer for ZeroOS"

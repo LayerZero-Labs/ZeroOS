@@ -1,5 +1,6 @@
 [package]
 name = "std-smoke"
+publish = false
 version.workspace = true
 edition.workspace = true
 

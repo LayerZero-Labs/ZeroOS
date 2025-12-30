@@ -1,6 +1,6 @@
 [package]
 name = "zeroos-foundation"
-version = "0.3.0"
+version.workspace = true
 edition.workspace = true
 description = "ZeroOS foundation layer - the bedrock runtime, registry, and coordination that everything builds upon"
 

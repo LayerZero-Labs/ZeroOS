@@ -25,9 +25,6 @@ pub extern crate runtime_musl;
 #[cfg(feature = "runtime-gnu")]
 pub extern crate runtime_gnu;
 
-#[cfg(feature = "libunwind")]
-extern crate libunwind;
-
 #[cfg(feature = "memory")]
 pub use foundation::register_memory;
 

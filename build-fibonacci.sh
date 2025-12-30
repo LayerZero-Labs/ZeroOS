@@ -13,7 +13,7 @@ TARGET_TRIPLE="riscv64imac-unknown-none-elf"
 OUT_DIR="${ROOT}/target/${TARGET_TRIPLE}/$([ "$PROFILE" = "dev" ] && echo debug || echo "$PROFILE")"
 BIN="${OUT_DIR}/fibonacci"
 
-cargo spike build -p fibonacci --target "${TARGET_TRIPLE}" --quiet --features=debug --profile "${PROFILE}"
+cargo spike build -p fibonacci --target "${TARGET_TRIPLE}" -- --quiet --features=debug --profile "${PROFILE}"
 OUT_NOSTD="$(mktemp)"
 OUT_STD="$(mktemp)"
 trap 'rm -f "${OUT_NOSTD}" "${OUT_STD}"' EXIT
@@ -28,7 +28,7 @@ TARGET_TRIPLE="riscv64imac-zero-linux-musl"
 OUT_DIR="${ROOT}/target/${TARGET_TRIPLE}/$([ "$PROFILE" = "dev" ] && echo debug || echo "$PROFILE")"
 BIN="${OUT_DIR}/fibonacci"
 
-cargo spike build -p fibonacci --target "${TARGET_TRIPLE}" --mode std --quiet --features=std,debug --profile "${PROFILE}"
+cargo spike build -p fibonacci --target "${TARGET_TRIPLE}" --mode std -- --quiet --features=std,debug --profile "${PROFILE}"
 RUST_LOG=debug cargo spike run "${BIN}" --isa RV64IMAC --instructions 100000000 | tee "${OUT_STD}"
 grep -q "fibonacci(10) = 55" "${OUT_STD}"
 grep -q "Test PASSED" "${OUT_STD}"

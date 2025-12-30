@@ -63,6 +63,9 @@ struct ZeroosGenerateTargetArgs {
     #[command(flatten)]
     base: zeroos_build::cmds::GenerateTargetArgs,
 
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    backtrace: bool,
+
     #[arg(long, short = 'o')]
     output: Option<PathBuf>,
 }
@@ -337,7 +340,7 @@ Environment variables:
 
 fn generate_target_command(cli_args: ZeroosGenerateTargetArgs) -> Result<()> {
     use zeroos_build::cmds::generate_target_spec;
-    use zeroos_build::spec::{load_target_profile, parse_target_triple};
+    use zeroos_build::spec::{load_target_profile, parse_target_triple, TargetRenderOptions};
 
     debug!("Generating target spec with args: {:?}", cli_args.base);
 
@@ -354,8 +357,13 @@ fn generate_target_command(cli_args: ZeroosGenerateTargetArgs) -> Result<()> {
         return Err(anyhow::anyhow!("Either --profile or --target is required"));
     };
 
-    let json_content =
-        generate_target_spec(&cli_args.base).map_err(|e| anyhow::anyhow!("{}", e))?;
+    let json_content = generate_target_spec(
+        &cli_args.base,
+        TargetRenderOptions {
+            backtrace: cli_args.backtrace,
+        },
+    )
+    .map_err(|e| anyhow::anyhow!("{}", e))?;
 
     let output_path = cli_args
         .output

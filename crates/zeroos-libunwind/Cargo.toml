@@ -1,9 +1,0 @@
-[package]
-name = "zeroos-libunwind"
-version.workspace = true
-edition.workspace = true
-description = "Minimal unwind stubs for panic=abort environments"
-
-[lib]
-name = "zeroos_libunwind"
-path = "src/lib.rs"

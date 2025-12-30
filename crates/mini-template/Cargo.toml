@@ -1,0 +1,13 @@
+[package]
+name = "mini-template"
+version.workspace = true
+edition.workspace = true
+description = "Minimal, auditable template renderer for ZeroOS build-time scripts"
+
+[lib]
+name = "mini_template"
+path = "src/lib.rs"
+
+[dependencies]
+
+

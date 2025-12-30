@@ -26,7 +26,6 @@ std = [
   "arch-riscv",
   "os-linux",
   "runtime-musl",
-  "libunwind",
 
   "vfs-device-console",
   "memory",
@@ -40,7 +39,7 @@ bounds-checks = ["zeroos/bounds-checks"]
 arch-riscv = ["zeroos/arch-riscv"]
 os-linux = ["zeroos/os-linux"]
 runtime-musl = ["zeroos/runtime-musl"]
-libunwind = ["zeroos/libunwind"]
+backtrace = ["runtime-musl", "zeroos/backtrace"]
 
 memory = ["zeroos/alloc-linked-list"]
 vfs = ["zeroos/vfs"]

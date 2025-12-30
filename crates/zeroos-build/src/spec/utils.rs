@@ -2,6 +2,18 @@ use super::target::TargetConfig;
 use super::GENERIC_LINUX_TEMPLATE;
 use crate::spec::llvm::LLVMConfig;
 use crate::spec::ArchSpec;
+use mini_template as ztpl;
+
+#[derive(Debug, Clone, Copy)]
+pub struct TargetRenderOptions {
+    pub backtrace: bool,
+}
+
+impl Default for TargetRenderOptions {
+    fn default() -> Self {
+        Self { backtrace: true }
+    }
+}
 
 pub fn parse_target_triple(target: &str) -> Option<TargetConfig> {
     // Parse target triple: {arch}-{vendor}-{sys}[-{abi}]
@@ -31,24 +43,30 @@ pub fn parse_target_triple(target: &str) -> Option<TargetConfig> {
 }
 
 impl TargetConfig {
-    pub fn render(&self, arch_spec: &ArchSpec, llvm_config: &LLVMConfig) -> String {
+    pub fn render(
+        &self,
+        arch_spec: &ArchSpec,
+        llvm_config: &LLVMConfig,
+        opts: TargetRenderOptions,
+    ) -> Result<String, String> {
         let template = GENERIC_LINUX_TEMPLATE;
 
-        template
-            .replace("{ARCH}", arch_spec.arch)
-            .replace("{CPU}", arch_spec.cpu)
-            .replace("{FEATURES}", &llvm_config.features)
-            .replace("{LLVM_TARGET}", &llvm_config.llvm_target)
-            .replace("{ABI}", &llvm_config.abi)
-            .replace("{DATA_LAYOUT}", &llvm_config.data_layout)
-            .replace("{POINTER_WIDTH}", arch_spec.pointer_width)
-            .replace("{ENDIAN}", arch_spec.endian)
-            .replace("{OS}", &self.os)
-            .replace("{ENV}", &self.abi)
-            .replace("{VENDOR}", &self.vendor)
-            .replace(
-                "{MAX_ATOMIC_WIDTH}",
-                &arch_spec.max_atomic_width.to_string(),
-            )
+        let ctx = ztpl::Context::new()
+            .with_str("ARCH", arch_spec.arch)
+            .with_str("CPU", arch_spec.cpu)
+            .with_str("FEATURES", &llvm_config.features)
+            .with_str("LLVM_TARGET", &llvm_config.llvm_target)
+            .with_str("ABI", &llvm_config.abi)
+            .with_str("DATA_LAYOUT", &llvm_config.data_layout)
+            .with_str("POINTER_WIDTH", arch_spec.pointer_width)
+            .with_str("ENDIAN", arch_spec.endian)
+            .with_str("OS", &self.os)
+            .with_str("ENV", &self.abi)
+            .with_str("VENDOR", &self.vendor)
+            .with_str("MAX_ATOMIC_WIDTH", arch_spec.max_atomic_width.to_string())
+            // JSON booleans (rendered without quotes in template)
+            .with_str("BACKTRACE", if opts.backtrace { "true" } else { "false" });
+
+        ztpl::render(template, &ctx).map_err(|e| e.to_string())
     }
 }

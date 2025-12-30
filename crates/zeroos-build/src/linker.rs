@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use mini_template as ztpl;
 use std::fs;
 use std::path::Path;
 
@@ -11,6 +12,8 @@ pub struct LinkerConfig {
     pub heap_size: Option<usize>,
 
     pub stack_size: usize,
+
+    pub backtrace: bool,
 
     template: Option<String>,
 }
@@ -28,6 +31,7 @@ impl LinkerConfig {
             memory_size: DEFAULT_MEMORY_SIZE,
             heap_size: None,
             stack_size: DEFAULT_STACK_SIZE,
+            backtrace: false,
             template: None,
         }
     }
@@ -50,6 +54,11 @@ impl LinkerConfig {
 
     pub fn with_template(mut self, template: String) -> Self {
         self.template = Some(template);
+        self
+    }
+
+    pub fn with_backtrace(mut self, backtrace: bool) -> Self {
+        self.backtrace = backtrace;
         self
     }
 
@@ -76,12 +85,14 @@ impl LinkerConfig {
             .as_deref()
             .or(self.template.as_deref())
             .unwrap_or(LINKER_SCRIPT_TEMPLATE);
+        let ctx = ztpl::Context::new()
+            .with_bool("backtrace", self.backtrace)
+            .with_str("MEMORY_ORIGIN", origin)
+            .with_str("MEMORY_SIZE", mem_size)
+            .with_str("HEAP_SIZE", heap_size)
+            .with_str("STACK_SIZE", stack_size);
 
-        template
-            .replace("{MEMORY_ORIGIN}", &origin)
-            .replace("{MEMORY_SIZE}", &mem_size)
-            .replace("{HEAP_SIZE}", &heap_size)
-            .replace("{STACK_SIZE}", &stack_size)
+        ztpl::render(template, &ctx).unwrap_or_else(|_| template.to_string())
     }
 }
 

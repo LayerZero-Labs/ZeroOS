@@ -42,6 +42,10 @@ entries:
     target:
       - *host_targets
 
+  - package: mini-template
+    target:
+      - *host_targets
+
   - package: htif
     target:
       - *targets_none_elf_imac
@@ -95,10 +99,6 @@ entries:
       - *targets_linux_musl_gc
 
   - package: zeroos-runtime-gnu
-    target:
-      - *targets_linux_musl_gc
-
-  - package: zeroos-libunwind
     target:
       - *targets_linux_musl_gc
 
@@ -162,7 +162,6 @@ entries:
       - arch-riscv
       - os-linux
       - runtime-musl
-      - libunwind
       - [alloc-linked-list, alloc-buddy, alloc-bump]
       - vfs-device-console
       - vfs-device-null
@@ -211,7 +210,6 @@ entries:
       - std
       - os-linux
       - runtime-musl
-      - libunwind
       - memory
       - vfs
       - vfs-device-console
@@ -221,7 +219,7 @@ entries:
     target: riscv64imac-unknown-none-elf
     commands:
       build: >-
-        cargo spike build --package {package} --target "{target}" {features_flag} --quiet
+        cargo spike build --package {package} --target "{target}" -- {features_flag} --quiet
     features:
       - with-spike
 
@@ -230,7 +228,7 @@ entries:
       - *targets_linux_musl_gc
     commands:
       build: >-
-        cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std {features_flag} --quiet
+        cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std -- {features_flag} --quiet
     features:
       - with-spike
       - std
@@ -240,7 +238,7 @@ entries:
       - *targets_linux_musl_gc
     commands:
       build: >-
-        cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std {features_flag} --quiet
+        cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std -- {features_flag} --quiet
     features:
       - with-spike
       - std
@@ -250,4 +248,4 @@ entries:
       - *targets_linux_musl_gc
     commands:
       build: >-
-        cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std {features_flag} --quiet
+        cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std -- {features_flag} --quiet

@@ -3,6 +3,7 @@ members = [
   "xtask",
   "crates/cargo-matrix",
   "crates/htif",
+  "crates/mini-template",
   "crates/zeroos",
   "crates/zeroos-foundation",
   "crates/zeroos-debug",
@@ -13,7 +14,6 @@ members = [
   "crates/zeroos-runtime-musl",
   "crates/zeroos-runtime-gnu",
   "crates/zeroos-runtime-nostd",
-  "crates/zeroos-libunwind",
   "crates/zeroos-build",
   "crates/zeroos-allocator-bump",
   "crates/zeroos-allocator-linked-list",
@@ -42,6 +42,7 @@ description = "ZeroOS"
 [workspace.dependencies]
 # Internal workspace crates
 cargo-matrix = { path = "crates/cargo-matrix" }
+mini-template = { path = "crates/mini-template" }
 zeroos = { path = "crates/zeroos" }
 foundation = { path = "crates/zeroos-foundation", package = "zeroos-foundation" }
 debug = { path = "crates/zeroos-debug", package = "zeroos-debug" }
@@ -51,7 +52,6 @@ os-linux = { path = "crates/zeroos-os-linux", package = "zeroos-os-linux" }
 runtime-musl = { path = "crates/zeroos-runtime-musl", package = "zeroos-runtime-musl" }
 runtime-gnu = { path = "crates/zeroos-runtime-gnu", package = "zeroos-runtime-gnu" }
 runtime-nostd = { path = "crates/zeroos-runtime-nostd", package = "zeroos-runtime-nostd" }
-libunwind = { path = "crates/zeroos-libunwind", package = "zeroos-libunwind" }
 allocator-linked-list = { path = "crates/zeroos-allocator-linked-list", package = "zeroos-allocator-linked-list" }
 allocator-bump = { path = "crates/zeroos-allocator-bump", package = "zeroos-allocator-bump" }
 allocator-buddy = { path = "crates/zeroos-allocator-buddy", package = "zeroos-allocator-buddy" }

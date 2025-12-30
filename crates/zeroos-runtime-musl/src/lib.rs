@@ -1,5 +1,7 @@
 #![no_std]
 
+#[cfg(feature = "backtrace")]
+mod eh_frame_register;
 mod lock_override;
 mod stack;
 

@@ -3,12 +3,12 @@ ENTRY(_start)
 
 MEMORY
 {
-    RAM (rwx) : ORIGIN = {MEMORY_ORIGIN}, LENGTH = {MEMORY_SIZE}
+    RAM (rwx) : ORIGIN = {{ MEMORY_ORIGIN }}, LENGTH = {{ MEMORY_SIZE }}
 }
 
 /* Reserve heap and stack sizes */
-__heap_size = {HEAP_SIZE};
-__stack_size = {STACK_SIZE};
+__heap_size = {{ HEAP_SIZE }};
+__stack_size = {{ STACK_SIZE }};
 
 PHDRS
 {
@@ -20,7 +20,7 @@ PHDRS
 
 SECTIONS
 {
-    . = {MEMORY_ORIGIN};
+    . = {{ MEMORY_ORIGIN }};
     PROVIDE_HIDDEN(__ehdr_start = .);
     
     .text : {
@@ -34,6 +34,27 @@ SECTIONS
         *(.srodata .srodata.*)
         . = ALIGN(8);
     } > RAM : rodata
+
+    {% if backtrace %}
+    .eh_frame_hdr : ALIGN(4) {
+        PROVIDE_HIDDEN(__eh_frame_hdr_start = .);
+        KEEP(*(.eh_frame_hdr))
+        PROVIDE_HIDDEN(__eh_frame_hdr_end = .);
+        . = ALIGN(8);
+    } > RAM : rodata
+
+    .eh_frame : ALIGN(8) {
+        PROVIDE_HIDDEN(__eh_frame_start = .);
+        KEEP(*(.eh_frame))
+        KEEP(*(.eh_frame.*))
+        /* GCC/libgcc expects .eh_frame to be terminated by a 0-length entry.
+         * Without this, __register_frame may walk past the end and fault.
+         */
+        LONG(0)
+        PROVIDE_HIDDEN(__eh_frame_end = .);
+        . = ALIGN(8);
+    } > RAM : rodata
+    {% endif %}
     
     /* Constructor/destructor arrays (used by musl's __libc_start_init)
      * GNU convention: these come BEFORE .data section
@@ -96,23 +117,27 @@ SECTIONS
         PROVIDE_HIDDEN(fromhost = . - 8);
     } > RAM : data
     
-    /* Heap section - must be PROGBITS not NOLOAD so Spike loads it */
-    .heap : ALIGN(4096) {
-        PROVIDE(__heap_start = .);
-        . = . + __heap_size;
-        PROVIDE(__heap_end = .);
-    } > RAM : data
-    
-    /* Stack section - must be PROGBITS not NOLOAD so Spike loads it */
-    .stack : ALIGN(16) {
-        PROVIDE(__stack_bottom = .);
-        . = . + __stack_size;
-        PROVIDE(__stack_top = .);
-    } > RAM : data
-    
-    /DISCARD/ : {
-        *(.eh_frame)
-        *(.comment)
-    }
+    /* Heap/stack reservation without file bloat.
+     *
+     * In zkVM/unikernel settings, heap and stack are *reservations* in RAM, not initialized data.
+     * Encoding them as sections (even NOLOAD/NOBITS) advances the linker location counter and can
+     * force huge file offsets for non-alloc sections (e.g. .symtab), inflating the ELF on disk.
+     *
+     * Instead, compute heap/stack boundaries as linker symbols near the top of RAM, without
+     * emitting any heap/stack sections at all.
+     */
+    /* Align down to 16 bytes: ALIGN(x - 15, 16) == floor(x/16)*16 */
+    PROVIDE(__stack_top = ALIGN((ORIGIN(RAM) + LENGTH(RAM)) - 15, 16));
+    PROVIDE(__stack_bottom = __stack_top - __stack_size);
+
+    /* Align heap end to a page boundary below the stack, leaving a 1-page guard gap. */
+    PROVIDE(__stack_guard_size = 4096);
+    PROVIDE(__heap_end = ALIGN((__stack_bottom - __stack_guard_size) - 4095, 4096));
+    PROVIDE(__heap_start = ALIGN((__heap_end - __heap_size) - 4095, 4096));
+
+    /* Safety: ensure the reserved regions do not overlap the loaded image. */
+    ASSERT(__heap_start >= __bss_end, "heap overlaps .bss/.data")
+    ASSERT(__heap_end <= __stack_bottom, "heap overlaps stack")
+    ASSERT(__heap_end + __stack_guard_size <= __stack_bottom, "heap/stack guard gap violated")
 }
 

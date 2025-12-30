@@ -71,6 +71,47 @@ impl<T> DownwardStack<T> {
     }
 }
 
+impl DownwardStack<usize> {
+    /// Push raw bytes onto the stack, rounded up to `align` bytes.
+    /// Returns a pointer (address) to the start of the bytes.
+    #[inline(always)]
+    #[cfg(feature = "backtrace")]
+    fn push_bytes_aligned(&mut self, bytes: &[u8], align: usize) -> usize {
+        debug_assert!(align.is_power_of_two());
+        let len = bytes.len();
+        let rounded = (len + (align - 1)) & !(align - 1);
+        self.sp -= rounded;
+
+        #[cfg(feature = "bounds-checks")]
+        {
+            if self.sp < self.buffer_bottom {
+                #[cfg(feature = "debug")]
+                debug::writeln!(
+                    "Stack overflow! SP=0x{:x} below stack bottom=0x{:x}, top=0x{:x}",
+                    self.sp,
+                    self.buffer_bottom,
+                    self.buffer_top
+                );
+
+                panic!(
+                    "Stack overflow! SP=0x{:x} below stack bottom=0x{:x}, top=0x{:x}",
+                    self.sp, self.buffer_bottom, self.buffer_top
+                );
+            }
+        }
+
+        unsafe {
+            core::ptr::copy_nonoverlapping(bytes.as_ptr(), self.sp as *mut u8, len);
+            // Zero any padding bytes so the stack contents are deterministic.
+            for i in len..rounded {
+                core::ptr::write((self.sp + i) as *mut u8, 0);
+            }
+        }
+
+        self.sp
+    }
+}
+
 #[inline]
 fn generate_random_bytes(entropy: &[u64]) -> (u64, u64) {
     let mut state = 0x123456789abcdef0u64;
@@ -95,19 +136,19 @@ fn generate_random_bytes(entropy: &[u64]) -> (u64, u64) {
 pub unsafe fn build_musl_stack(
     stack_top: usize,
     stack_bottom: usize,
-    _ehdr_start: usize,
     program_name: &'static [u8],
 ) -> usize {
     let mut ds = DownwardStack::<usize>::new(stack_top, stack_bottom);
 
-    // Zero-auxv approach: Tell musl that program headers are not available.
-    // This avoids expensive ELF parsing at runtime (critical for zkVM cycle efficiency).
-    // Musl will skip PT_TLS parsing and use builtin TLS, which is sufficient for
-    // single-threaded bare-metal execution.
-    let at_phdr = 0;
-    let at_phent = 0;
-    let at_phnum = 0;
-    let at_entry = 0;
+    // Optional environment variables for musl's `__libc_start_main`:
+    // it computes envp = argv + argc + 1.
+    #[cfg(feature = "backtrace")]
+    let rust_backtrace_ptr =
+        ds.push_bytes_aligned(b"RUST_BACKTRACE=full\0", core::mem::align_of::<usize>());
+
+    // In ZeroOS we run as a single static image with no dynamic loader; musl startup does not
+    // require AT_PHDR/AT_PHNUM/AT_PHENT/AT_ENTRY for correctness, so we set them to 0.
+    let (at_phdr, at_phent, at_phnum, at_entry) = (0usize, 0usize, 0usize, 0usize);
 
     // Prepare auxiliary vector entries
     let auxv_entries = [
@@ -156,8 +197,13 @@ pub unsafe fn build_musl_stack(
         ds.push(key);
     }
 
+    // envp terminator (always present)
     ds.push(0);
+    // envp[0] (optional)
+    #[cfg(feature = "backtrace")]
+    ds.push(rust_backtrace_ptr);
 
+    // argv terminator
     ds.push(0);
     ds.push(program_name.as_ptr() as usize);
 
@@ -178,7 +224,7 @@ mod tests {
         let program_name = b"test\0";
 
         unsafe {
-            let new_sp = build_musl_stack(stack_top, stack_top - 4096, 0, program_name);
+            let new_sp = build_musl_stack(stack_top, stack_top - 4096, program_name);
 
             assert_eq!(new_sp % 16, 0, "Stack pointer must be 16-byte aligned");
 
@@ -194,7 +240,7 @@ mod tests {
         let program_name = b"myprogram\0";
 
         unsafe {
-            let new_sp = build_musl_stack(stack_top, stack_top - 4096, 0, program_name);
+            let new_sp = build_musl_stack(stack_top, stack_top - 4096, program_name);
 
             let argc_ptr = new_sp as *const usize;
             let argc = *argc_ptr;

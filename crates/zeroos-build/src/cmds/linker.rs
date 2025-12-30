@@ -14,6 +14,9 @@ pub struct GenerateLinkerArgs {
     #[arg(long, default_value = "2Mi")]
     pub stack_size: String,
 
+    #[arg(long, default_value_t = true, action = clap::ArgAction::Set)]
+    pub backtrace: bool,
+
     #[arg(long, default_value = "_start")]
     pub entry_point: String,
 }
@@ -44,13 +47,15 @@ pub fn generate_linker_script(args: &GenerateLinkerArgs) -> Result<LinkerGenerat
         .with_context(|| format!("Invalid stack_size: {}", args.stack_size))?
         as usize;
 
-    const LINKER_TEMPLATE: &str = include_str!("../files/linker.ld.template");
+    let cfg = crate::linker::LinkerConfig::new()
+        .with_memory(ram_start, ram_size)
+        .with_heap_size(heap_size)
+        .with_stack_size(stack_size)
+        .with_backtrace(args.backtrace);
 
-    let mut script_content = LINKER_TEMPLATE
-        .replace("{MEMORY_ORIGIN}", &format!("{:#x}", ram_start))
-        .replace("{MEMORY_SIZE}", &format!("{:#x}", ram_size))
-        .replace("{HEAP_SIZE}", &format!("{:#x}", heap_size))
-        .replace("{STACK_SIZE}", &format!("{:#x}", stack_size));
+    let mut script_content = cfg.render(Some(
+        include_str!("../files/linker.ld.template").to_string(),
+    ));
 
     if args.entry_point != "_start" {
         script_content =

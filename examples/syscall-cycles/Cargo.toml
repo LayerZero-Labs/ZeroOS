@@ -15,7 +15,6 @@ std = [
   # minimal std(musl) runtime support without enabling `platform/std` (which pulls in threads)
   "platform/os-linux",
   "platform/runtime-musl",
-  "platform/libunwind",
   "memory",
   "platform/vfs",
   "platform/vfs-device-console",

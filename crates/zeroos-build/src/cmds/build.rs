@@ -4,16 +4,29 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 
+use crate::spec::TargetRenderOptions;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum StdMode {
     Std,
     NoStd,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+pub enum BacktraceMode {
+    Auto,
+    Enable,
+    Disable,
+}
+
 #[derive(clap::Args, Debug, Clone)]
 pub struct BuildArgs {
     #[arg(long, short = 'p')]
     pub package: String,
+
+    /// Backtrace policy for the guest.
+    #[arg(long, value_enum, default_value = "auto")]
+    pub backtrace: BacktraceMode,
 
     #[arg(long, default_value = "0x80000000")]
     pub memory_origin: String,
@@ -42,7 +55,11 @@ pub struct BuildArgs {
     #[arg(long, env = "RISCV_GCC_PATH")]
     pub gcc_lib_path: Option<PathBuf>,
 
-    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    /// Arguments after `--` are forwarded to the underlying `cargo build` invocation.
+    ///
+    /// Example:
+    ///   `cargo spike build -p foo --target ... --mode std -- --release --quiet`
+    #[arg(trailing_var_arg = true)]
     pub cargo_args: Vec<String>,
 }
 
@@ -90,6 +107,7 @@ pub fn build_binary(
     let target_dir = crate::project::get_target_directory(workspace_root)?;
 
     let profile = crate::project::detect_profile(&args.cargo_args);
+    let backtrace_enabled = should_enable_backtrace(args, &profile);
 
     debug!("target_dir: {}", target_dir.display());
     debug!("target: {}", target);
@@ -103,7 +121,8 @@ pub fn build_binary(
     let config = crate::linker::LinkerConfig::new()
         .with_memory(memory_origin, memory_size)
         .with_stack_size(stack_size)
-        .with_heap_size(heap_size);
+        .with_heap_size(heap_size)
+        .with_backtrace(backtrace_enabled);
 
     let config = if let Some(template) = linker_template {
         config.with_template(template)
@@ -120,7 +139,14 @@ pub fn build_binary(
         .or_else(|| {
             if args.mode == StdMode::Std && target == TARGET_STD {
                 let target_spec_path = crate_out_dir.join(format!("{}.json", target));
-                write_target_spec(target_spec_path, target).ok();
+                write_target_spec(
+                    target_spec_path,
+                    target,
+                    TargetRenderOptions {
+                        backtrace: backtrace_enabled,
+                    },
+                )
+                .ok();
                 Some(crate_out_dir.clone())
             } else {
                 None
@@ -155,6 +181,13 @@ pub fn build_binary(
         .ok()
         .map(|s| s.split('\x1f').map(|s| s.to_string()).collect())
         .unwrap_or_default();
+
+    // In unwind-table-based backtraces, we need DWARF CFI tables even with `panic=abort`.
+    // This forces `.eh_frame` emission for Rust code when backtraces are enabled.
+    if args.mode == StdMode::Std && backtrace_enabled {
+        rustflags_parts.push("-C".to_string());
+        rustflags_parts.push("force-unwind-tables=yes".to_string());
+    }
 
     for arg in &link_args {
         rustflags_parts.push("-C".to_string());
@@ -210,13 +243,17 @@ pub fn build_binary(
 fn write_target_spec(
     target_spec_path: impl AsRef<Path>,
     target: &str,
+    render_opts: TargetRenderOptions,
 ) -> Result<(), anyhow::Error> {
     let path = target_spec_path.as_ref();
     debug!("Writing target spec to: {}", path.display());
-    let target_spec_json = crate::cmds::generate_target_spec(&GenerateTargetArgs {
-        profile: Some(target.to_string()),
-        ..Default::default()
-    })
+    let target_spec_json = crate::cmds::generate_target_spec(
+        &GenerateTargetArgs {
+            profile: Some(target.to_string()),
+            ..Default::default()
+        },
+        render_opts,
+    )
     .map_err(|e| anyhow::anyhow!("Failed to generate target spec: {}", e))
     .unwrap();
     fs::write(path, target_spec_json)?;
@@ -293,3 +330,16 @@ pub fn parse_address(s: &str) -> Result<usize> {
 use crate::cmds::GenerateTargetArgs;
 
 pub use crate::project::find_workspace_root;
+
+fn should_enable_backtrace(args: &BuildArgs, profile: &str) -> bool {
+    match args.backtrace {
+        BacktraceMode::Enable => true,
+        BacktraceMode::Disable => false,
+        BacktraceMode::Auto => {
+            // Default split:
+            // - debug/dev profiles: on
+            // - release/other profiles: off
+            matches!(profile, "debug" | "dev")
+        }
+    }
+}

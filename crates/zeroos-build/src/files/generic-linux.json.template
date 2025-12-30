@@ -1,20 +1,20 @@
 {
-  "arch": "{ARCH}",
-  "cpu": "{CPU}",
-  "features": "{FEATURES}",
-  "llvm-target": "{LLVM_TARGET}",
-  "llvm-abiname": "{ABI}",
-  "data-layout": "{DATA_LAYOUT}",
-  "target-endian": "{ENDIAN}",
-  "target-pointer-width": "{POINTER_WIDTH}",
-  "os": "{OS}",
-  "env": "{ENV}",
-  "vendor": "{VENDOR}",
-  "abi": "{ABI}",
+  "arch": "{{ ARCH }}",
+  "cpu": "{{ CPU }}",
+  "features": "{{ FEATURES }}",
+  "llvm-target": "{{ LLVM_TARGET }}",
+  "llvm-abiname": "{{ ABI }}",
+  "data-layout": "{{ DATA_LAYOUT }}",
+  "target-endian": "{{ ENDIAN }}",
+  "target-pointer-width": "{{ POINTER_WIDTH }}",
+  "os": "{{ OS }}",
+  "env": "{{ ENV }}",
+  "vendor": "{{ VENDOR }}",
+  "abi": "{{ ABI }}",
   "target-family": [
     "unix"
   ],
-  "max-atomic-width": {MAX_ATOMIC_WIDTH},
+  "max-atomic-width": {{ MAX_ATOMIC_WIDTH }},
   "singlethread": true,
   "has-thread-local": false,
   "disable-redzone": true,
@@ -38,13 +38,13 @@
   "supported-split-debuginfo": [
     "off"
   ],
-  "eh-frame-header": false,
+  "eh-frame-header": {{ BACKTRACE }},
   "metadata": {
     "description": "RISC-V 64-bit with minimal musl-like environment",
     "tier": 3,
     "host-tools": false,
     "std": true
   },
-  "requires-uwtable": false,
-  "default-uwtable": false
+  "requires-uwtable": {{ BACKTRACE }},
+  "default-uwtable": {{ BACKTRACE }}
 }

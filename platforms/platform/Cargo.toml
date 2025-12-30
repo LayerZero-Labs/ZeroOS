@@ -22,7 +22,7 @@ bounds-checks = ["spike-platform?/bounds-checks"]
 std = ["spike-platform?/std"]
 os-linux = ["spike-platform?/os-linux"]
 runtime-musl = ["spike-platform?/runtime-musl"]
-libunwind = ["spike-platform?/libunwind"]
+backtrace = ["spike-platform?/backtrace"]
 
 vfs = ["spike-platform?/vfs"]
 vfs-device-console = ["spike-platform?/vfs-device-console"]

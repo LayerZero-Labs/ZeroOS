@@ -29,6 +29,7 @@ memory = ["platform/memory"]
 vfs = ["platform/vfs"]
 bounds-checks = ["platform/bounds-checks"]
 thread = ["platform/thread"]
+backtrace = ["platform/backtrace"]
 
 [[bin]]
 name = "std-smoke"

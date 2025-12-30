@@ -21,6 +21,7 @@ cargo spike build \
 	--memory-size 128Mi \
 	--heap-size 64Mi \
 	--stack-size 2Mi \
+	-- \
 	--quiet \
 	--profile "${PROFILE}"
 

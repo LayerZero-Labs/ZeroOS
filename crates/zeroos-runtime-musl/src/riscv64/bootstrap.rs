@@ -13,7 +13,6 @@ extern "C" {
         ldso_dummy: Option<extern "C" fn()>,
     ) -> i32;
 
-    static __ehdr_start: u8;
 }
 
 #[no_mangle]
@@ -40,9 +39,8 @@ unsafe fn build_musl_in_buffer() -> usize {
     let buffer_ptr = core::ptr::addr_of_mut!(MUSL_BUILD_BUFFER) as *mut usize;
     let buffer_bottom = buffer_ptr as usize;
     let buffer_top = buffer_ptr.add(MUSL_BUFFER_SIZE) as usize;
-    let ehdr_start = core::ptr::addr_of!(__ehdr_start) as usize;
 
-    let size = build_musl_stack(buffer_top, buffer_bottom, ehdr_start, PROGRAM_NAME);
+    let size = build_musl_stack(buffer_top, buffer_bottom, PROGRAM_NAME);
 
     if size > MUSL_BUFFER_BYTES {
         panic!(

@@ -526,6 +526,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mini-template"
+version = "0.1.0"
+
+[[package]]
 name = "nu-ansi-term"
 version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1167,7 +1171,6 @@ dependencies = [
  "zeroos-device-urandom",
  "zeroos-device-zero",
  "zeroos-foundation",
- "zeroos-libunwind",
  "zeroos-macros",
  "zeroos-os-linux",
  "zeroos-rng",
@@ -1222,6 +1225,7 @@ dependencies = [
  "clap",
  "dirs",
  "log",
+ "mini-template",
  "parse-size",
  "serde",
  "serde_json",
@@ -1278,10 +1282,6 @@ dependencies = [
  "libc",
  "zeroos-debug",
 ]
-
-[[package]]
-name = "zeroos-libunwind"
-version = "0.1.0"
 
 [[package]]
 name = "zeroos-macros"

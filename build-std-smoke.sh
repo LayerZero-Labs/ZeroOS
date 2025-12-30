@@ -2,6 +2,7 @@
 set -euo pipefail
 
 export RUSTUP_NO_UPDATE_CHECK=1
+
 TARGET_TRIPLE="riscv64imac-zero-linux-musl"
 PROFILE="dev"
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd))"
@@ -10,7 +11,7 @@ BIN="${OUT_DIR}/std-smoke"
 cd "${ROOT}"
 
 echo "Building std-smoke example..."
-cargo spike build -p std-smoke --target "${TARGET_TRIPLE}" --mode std --quiet --features=std --profile "${PROFILE}"
+cargo spike build -p std-smoke --target "${TARGET_TRIPLE}" --mode std --backtrace=enable -- --quiet --features=std,backtrace --profile "${PROFILE}"
 
 echo "Running on Spike simulator..."
 OUT="$(mktemp)"

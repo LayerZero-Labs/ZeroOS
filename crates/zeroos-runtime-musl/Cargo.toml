@@ -17,3 +17,4 @@ foundation.workspace = true
 default = []
 debug = ["debug/debug"]
 bounds-checks = []
+backtrace = []

@@ -1,4 +1,6 @@
-use crate::spec::{get_arch_spec, load_target_profile, parse_target_triple, LLVMConfig};
+use crate::spec::{
+    get_arch_spec, load_target_profile, parse_target_triple, LLVMConfig, TargetRenderOptions,
+};
 
 ///      --features "+m,+a,+c" --abi lp64 \
 ///      --data-layout "e-m:e-p:64:64-i64:64-i128:128-n32:64-S128" \
@@ -26,7 +28,10 @@ pub struct GenerateTargetArgs {
     pub data_layout: Option<String>,
 }
 
-pub fn generate_target_spec(args: &GenerateTargetArgs) -> Result<String, String> {
+pub fn generate_target_spec(
+    args: &GenerateTargetArgs,
+    render_opts: TargetRenderOptions,
+) -> Result<String, String> {
     let (config, arch_spec, mut llvm_config) = if let Some(profile_name) = &args.profile {
         let profile = load_target_profile(profile_name).ok_or_else(|| {
             format!(
@@ -89,7 +94,7 @@ pub fn generate_target_spec(args: &GenerateTargetArgs) -> Result<String, String>
         llvm_config.data_layout = data_layout.clone();
     }
 
-    let json_content = config.render(&arch_spec, &llvm_config);
+    let json_content = config.render(&arch_spec, &llvm_config, render_opts)?;
 
     Ok(json_content)
 }

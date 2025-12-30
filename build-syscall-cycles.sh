@@ -18,9 +18,9 @@ if [[ "${PROFILE}" = "release" ]]; then
 	CARGO_PROFILE_RELEASE_STRIP=none \
 	CARGO_PROFILE_RELEASE_LTO=true \
 	CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
-	cargo spike build -p syscall-cycles --target "${TARGET_TRIPLE}" --mode std --quiet --features=std --profile "${PROFILE}"
+	cargo spike build -p syscall-cycles --target "${TARGET_TRIPLE}" --mode std -- --quiet --features=std --profile "${PROFILE}"
 else
-	cargo spike build -p syscall-cycles --target "${TARGET_TRIPLE}" --mode std --quiet --features=std --profile "${PROFILE}"
+	cargo spike build -p syscall-cycles --target "${TARGET_TRIPLE}" --mode std -- --quiet --features=std --profile "${PROFILE}"
 fi
 
 # Persist logs under target/ so they survive script exit and are easy to share/debug.

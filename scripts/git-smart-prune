@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Defaults can be overridden via environment variables (no flags/options by design).
+BASE_BRANCH="${BASE_BRANCH:-main}"
+DRY_RUN="${DRY_RUN:-0}"
+
+die() {
+	echo "git smart-prune: $*" >&2
+	exit 2
+}
+
+current_branch() {
+	git branch --show-current 2>/dev/null || true
+}
+
+fetch_prune() {
+	git fetch -p >/dev/null 2>&1
+}
+
+is_upstream_gone() {
+	local track="$1"
+	[[ "$track" == *"[gone]"* ]]
+}
+
+has_unique_patches_vs_base() {
+	local base="$1"
+	local branch="$2"
+	[[ -n "$(git log --cherry-pick --right-only --oneline -n 1 "${base}...${branch}")" ]]
+}
+
+main() {
+	# No flags/options by design. This is intentionally a minimal "do the safe thing" command.
+	# If you need flags (dry-run, base branch selection, no-fetch), use `git cleanup-gone`.
+	if [[ $# -ne 0 ]]; then
+		die "no arguments supported (use: git cleanup-gone --help)"
+	fi
+
+	fetch_prune
+
+	local base="$BASE_BRANCH"
+	local cur
+	cur="$(current_branch)"
+
+	# Format is: "<branch>\t<upstream:track>"
+	git for-each-ref --format='%(refname:short)%09%(upstream:track)' refs/heads |
+		while IFS=$'\t' read -r branch track; do
+			[[ -z "$track" ]] && continue
+			is_upstream_gone "$track" || continue
+
+			[[ "$branch" == "$cur" ]] && continue
+			[[ "$branch" == "$base" ]] && continue
+			[[ "$branch" == "master" ]] && continue
+
+			has_unique_patches_vs_base "$base" "$branch" && continue
+
+			if [[ "$DRY_RUN" == "1" ]]; then
+				echo "would delete: ${branch}"
+			else
+				git branch -D "$branch"
+			fi
+		done
+}
+
+main "$@"

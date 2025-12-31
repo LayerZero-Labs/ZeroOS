@@ -564,8 +564,8 @@ fn run() -> Result<()> {
 
     let ctx = Context::new()?;
 
-    // only stash unstaged changes for files that are staged.
-    // In --dirty mode, we intentionally do NOT stash/keep-index/pop.
+    // Only hide+restore unstaged changes for files that are staged.
+    // In --dirty mode, we intentionally do NOT modify working tree state.
     let unstaged_in_staged: Vec<PathBuf> = if mode == FilesMode::Staged {
         let unstaged = unstaged_paths()?;
         files
@@ -576,10 +576,10 @@ fn run() -> Result<()> {
     } else {
         Vec::new()
     };
-    let stash_added = if mode == FilesMode::Staged {
-        stash_unstaged_keep_index(&unstaged_in_staged)?
+    let unstaged_patch = if mode == FilesMode::Staged {
+        hide_unstaged_changes_for_staged_files(&ctx, &unstaged_in_staged)?
     } else {
-        false
+        None
     };
 
     let tasks: Vec<Box<dyn Task>> = vec![
@@ -602,27 +602,18 @@ fn run() -> Result<()> {
         }
     }
 
-    let pop_result: Result<()> = if stash_added {
-        sh!("git stash pop --quiet")
-            .map(|_| ())
-            .map_err(|e| {
-                let files = join_paths(&unstaged_in_staged);
-                format!(
-                    "{e}\n[pre-commit] failed to restore unstaged changes for staged files: {files}\n\
-                     Resolve the conflict (stash is kept), or stage/stash those unstaged changes and retry."
-                )
-                .into()
-            })
+    let restore_result: Result<()> = if let Some(patch) = unstaged_patch.as_deref() {
+        restore_unstaged_changes_for_staged_files(&ctx, patch, &unstaged_in_staged)
     } else {
         Ok(())
     };
 
-    match (task_result.map(|_| ()), pop_result) {
+    match (task_result.map(|_| ()), restore_result) {
         (Ok(()), Ok(())) => Ok(()),
         (Err(e), Ok(())) => Err(e),
         (Ok(()), Err(e)) => Err(e),
-        (Err(task_err), Err(pop_err)) => Err(format!(
-            "tasks failed: {task_err}; additionally failed to restore unstaged changes: {pop_err}"
+        (Err(task_err), Err(restore_err)) => Err(format!(
+            "tasks failed: {task_err}; additionally failed to restore unstaged changes: {restore_err}"
         )
         .into()),
     }
@@ -713,12 +704,10 @@ fn capture(cmd: &str) -> Result<String> {
     Ok(sh!(options(pipe_opts().clone()), cmd)?.1)
 }
 
-fn current_stash_ref() -> Result<String> {
-    Ok(
-        capture("git rev-parse -q --verify refs/stash 2>/dev/null || true")?
-            .trim()
-            .to_string(),
-    )
+fn capture_in(cwd: &Path, cmd: &str) -> Result<String> {
+    let mut opts = pipe_opts().clone();
+    opts.cwd = Some(cwd.to_path_buf());
+    Ok(sh(ShCmd::Script(cmd.to_string()), opts)?.1)
 }
 
 fn parse_nul_paths(out: &str) -> Vec<PathBuf> {
@@ -804,29 +793,102 @@ fn staged_paths() -> Result<Vec<PathBuf>> {
     )?))
 }
 
-fn stash_unstaged_keep_index(paths: &[PathBuf]) -> Result<bool> {
+fn git_dir(ctx: &Context) -> Result<PathBuf> {
+    let out = capture_in(&ctx.root, "git rev-parse --git-dir")?;
+    let p = PathBuf::from(out.trim());
+    Ok(if p.is_absolute() { p } else { ctx.root.join(p) })
+}
+
+fn hide_unstaged_changes_for_staged_files(
+    ctx: &Context,
+    paths: &[PathBuf],
+) -> Result<Option<PathBuf>> {
     if paths.is_empty() {
-        return Ok(false);
+        return Ok(None);
     }
 
-    let before = current_stash_ref()?;
+    let git_dir = git_dir(ctx)?;
+    let patch = git_dir.join(format!(
+        "zk-pre-commit-unstaged-{}-{}.patch",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos()
+    ));
 
-    let mut c = Command::new("git");
-    c.args(["stash", "push", "--keep-index", "--quiet", "--"]);
-    c.args(paths);
+    // Save unstaged changes for these staged files into a patch inside `.git/`,
+    // then force-checkout the working tree back to the staged version.
+    let mut diff_argv: Vec<std::ffi::OsString> = vec![
+        "diff".into(),
+        "--binary".into(),
+        "--unified=0".into(),
+        "--no-color".into(),
+        "--no-ext-diff".into(),
+        "--patch".into(),
+        "--output".into(),
+        patch.as_os_str().into(),
+        "--".into(),
+    ];
+    diff_argv.extend(paths.iter().map(|p| p.as_os_str().into()));
 
-    let output = c.output()?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-        return Err(format!(
-            "Command failed with exit code {:?}: git stash push --keep-index --quiet -- <paths>\nStderr: {}",
-            output.status.code(),
-            stderr
-        ).into());
+    let mut opts = pipe_opts().clone();
+    opts.cwd = Some(ctx.root.clone());
+    sh(ShCmd::Argv("git".into(), diff_argv), opts.clone())?;
+
+    let mut checkout_argv: Vec<std::ffi::OsString> =
+        vec!["checkout".into(), "--force".into(), "--".into()];
+    checkout_argv.extend(paths.iter().map(|p| p.as_os_str().into()));
+    sh(ShCmd::Argv("git".into(), checkout_argv), opts)?;
+
+    Ok(Some(patch))
+}
+
+fn restore_unstaged_changes_for_staged_files(
+    ctx: &Context,
+    patch: &Path,
+    paths: &[PathBuf],
+) -> Result<()> {
+    let mut opts = pipe_opts().clone();
+    opts.cwd = Some(ctx.root.clone());
+
+    let apply = |extra: &[&str]| -> Result<()> {
+        let mut argv: Vec<std::ffi::OsString> = vec![
+            "apply".into(),
+            "-v".into(),
+            "--whitespace=nowarn".into(),
+            "--recount".into(),
+            "--unidiff-zero".into(),
+        ];
+        argv.extend(extra.iter().map(|s| (*s).into()));
+        argv.push(patch.as_os_str().into());
+        sh(ShCmd::Argv("git".into(), argv), opts.clone()).map(|_| ())
+    };
+
+    // Try a normal apply first, then retry with 3-way merge if it fails.
+    match apply(&[]) {
+        Ok(()) => {
+            let _ = std::fs::remove_file(patch);
+            Ok(())
+        }
+        Err(first_err) => match apply(&["--3way"]) {
+            Ok(()) => {
+                let _ = std::fs::remove_file(patch);
+                Ok(())
+            }
+            Err(second_err) => {
+                let files = join_paths(paths);
+                Err(format!(
+                    "{second_err}\n[pre-commit] failed to restore unstaged changes for staged files: {files}\n\
+                     A patch with the unstaged changes was left at: {}\n\
+                     Fix conflicts manually, then remove the patch file when done.\n\
+                     (original apply error: {first_err})",
+                    patch.display()
+                )
+                .into())
+            }
+        },
     }
-
-    let after = current_stash_ref()?;
-    Ok(!after.is_empty() && after != before)
 }
 
 // -*- mode: rust -*-

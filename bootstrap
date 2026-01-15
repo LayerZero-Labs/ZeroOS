@@ -442,6 +442,7 @@ EOF
 		log "Shell integration installed into ~/.bashrc and/or ~/.zshrc"
 	fi
 	log "Please restart your shell or run 'direnv allow' to activate the environment."
+	log "  or run 'exec \$SHELL -l' to reload your shell."
 }
 
 main "$@"

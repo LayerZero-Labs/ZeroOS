@@ -74,22 +74,47 @@ execution model while preserving the familiar POSIX/Linux syscall interface.
 
 ## Design Principles
 
-ZeroOS is guided by a set of foundational principles aimed at delivering maximum security, transparency, and trust for developers building verifiable applications.
+ZeroOS is guided by a set of foundational principles aimed at delivering maximum
+security, transparency, and trust for developers building verifiable
+applications.
 
 ### Fail-Fast Engineering
-ZeroOS follows a fail-fast philosophy: rather than masking incomplete features behind silent stubs, the kernel immediately returns an error or halts when encountering unsupported requests (such as certain mmap flags or malloc options). This approach guarantees that every execution path in a zkVM trace is both intentional and fully supported.
+
+ZeroOS follows a fail-fast philosophy: rather than masking incomplete features
+behind silent stubs, the kernel immediately returns an error or halts when
+encountering unsupported requests (such as certain mmap flags or malloc
+options). This approach guarantees that every execution path in a zkVM trace is
+both intentional and fully supported.
 
 ### Toolchain Integrity
-Developers can rely on standard toolchains without modification. ZeroOS works seamlessly with off-the-shelf musl-libc and Rust std, keeping the Trusted Computing Base (TCB) lean. By avoiding custom compiler patches or altered libraries, audit efforts remain focused on the ZeroOS kernel and application logic, not sprawling toolchain changes.
+
+Developers can rely on standard toolchains without modification. ZeroOS works
+seamlessly with off-the-shelf musl-libc and Rust std, keeping the Trusted
+Computing Base (TCB) lean. By avoiding custom compiler patches or altered
+libraries, audit efforts remain focused on the ZeroOS kernel and application
+logic, not sprawling toolchain changes.
 
 ### Surgical Modularity
-The kernel is built from modular, compile-time configurable components. This design lets developers include only the functionality they truly need, reducing binary size and zkVM trace length. With less code to review, audits become more straightforward and effective.
+
+The kernel is built from modular, compile-time configurable components. This
+design lets developers include only the functionality they truly need, reducing
+binary size and zkVM trace length. With less code to review, audits become more
+straightforward and effective.
 
 ### Architectural Transparency
-ZeroOS prioritizes clarity over abstraction. Core operations—such as thread creation, trap handling, and context switching—are implemented with explicit initialization and visible resource ownership. This transparency makes it easier to inspect critical paths for vulnerabilities and ensures deterministic behavior.
+
+ZeroOS prioritizes clarity over abstraction. Core operations—such as thread
+creation, trap handling, and context switching—are implemented with explicit
+initialization and visible resource ownership. This transparency makes it easier
+to inspect critical paths for vulnerabilities and ensures deterministic
+behavior.
 
 ### Unikernel Simplicity
-Operating as a statically linked unikernel in a single address space, ZeroOS avoids the complexity of multiple privilege levels and MMU management. In zkVM environments, these mechanisms often add unnecessary overhead and subtle risks. By stripping them away, ZeroOS achieves a simpler, more secure execution model.
+
+Operating as a statically linked unikernel in a single address space, ZeroOS
+avoids the complexity of multiple privilege levels and MMU management. In zkVM
+environments, these mechanisms often add unnecessary overhead and subtle risks.
+By stripping them away, ZeroOS achieves a simpler, more secure execution model.
 
 ## Getting Started
 
@@ -126,6 +151,14 @@ or
 
 ```bash
 cargo massage
+```
+
+### Run CI locally (act)
+
+To install `act`, visit <https://nektosact.com/> for installation instructions.
+
+```bash
+cargo act pull_request
 ```
 
 ## License

@@ -86,6 +86,33 @@ fn maybe_inject_remote_containers_ipc(cmd: &mut std::process::Command) {
     }
 }
 
+fn home_local_bin_dirs() -> Option<Vec<PathBuf>> {
+    let home = std::env::var_os("HOME")?;
+    let home = Path::new(&home);
+    Some(vec![home.join(".local/bin"), home.join("bin")])
+}
+
+fn append_dirs_to_path(cmd: &mut std::process::Command, dirs: &[PathBuf]) {
+    // Filter out missing dirs to keep PATH tidy (and avoid surprising entries).
+    let mut dirs: Vec<PathBuf> = dirs.iter().filter(|p| p.is_dir()).cloned().collect();
+    if dirs.is_empty() {
+        return;
+    }
+
+    let existing = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths: Vec<PathBuf> = std::env::split_paths(&existing).collect();
+
+    // Avoid duplicates: remove any existing occurrences of the dirs we’re about to append.
+    paths.retain(|p| !dirs.iter().any(|d| d == p));
+
+    // Append in the provided order.
+    paths.append(&mut dirs);
+
+    if let Ok(joined) = std::env::join_paths(paths) {
+        cmd.env("PATH", joined);
+    }
+}
+
 pub fn run(args: ActArgs) -> Result<(), Box<dyn std::error::Error>> {
     let workspace = crate::findup::workspace_root()?;
 
@@ -95,6 +122,13 @@ pub fn run(args: ActArgs) -> Result<(), Box<dyn std::error::Error>> {
         .stdin(Stdio::inherit())
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit());
+
+    // Make it easy to find locally installed CLIs (common in Dev Containers).
+    // We *append* these so we don't override anything already on PATH; they act as a fallback.
+    // Order matters: ~/.local/bin is typically preferred over ~/bin.
+    if let Some(extra_dirs) = home_local_bin_dirs() {
+        append_dirs_to_path(&mut cmd, &extra_dirs);
+    }
 
     // In Dev Containers, Docker may be configured to use the dev-containers credential helper:
     //   ~/.docker/config.json: { "credsStore": "dev-containers-<id>" }

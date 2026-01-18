@@ -31,6 +31,17 @@ members = [
   "examples/syscall-cycles",
   "examples/std-smoke",
   "examples/c-smoke/rust",
+  "examples/parallel-keccak",
+  "examples/batched-signatures",
+  "examples/merkle-tree",
+  "examples/parallel-mergesort",
+  "examples/matrix-multiply",
+  "examples/prefix-sum",
+  "examples/fft",
+  "examples/wavelet-transform",
+  "examples/graph-bfs",
+  "examples/block-compression",
+  "examples/polynomial-eval",
 ]
 resolver = "2"
 

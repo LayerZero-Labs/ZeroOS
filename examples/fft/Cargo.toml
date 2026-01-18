@@ -1,0 +1,29 @@
+[package]
+name = "fft"
+publish = false
+version.workspace = true
+edition.workspace = true
+description = "Parallel FFT with stage partitioning (Cooley-Tukey)"
+
+[dependencies]
+platform.workspace = true
+debug.workspace = true
+cfg-if.workspace = true
+
+[features]
+default = ["with-spike"]
+
+debug = ["platform/debug"]
+
+std = [
+  "platform/std",
+  "platform/vfs-device-console",
+  "platform/memory",
+  "platform/bounds-checks",
+]
+
+with-spike = ["platform/with-spike"]
+# with-jolt = ["platform/with-jolt"]  # Uncomment when jolt-platform exists
+
+[target.'cfg(target_os = "none")'.dependencies]
+platform = { workspace = true, features = ["memory"] }

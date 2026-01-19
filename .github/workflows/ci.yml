@@ -5,10 +5,12 @@ on:
     branches:
       - master
       - main
+      - dev
   pull_request:
     branches:
       - master
       - main
+      - dev
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

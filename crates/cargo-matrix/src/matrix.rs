@@ -60,11 +60,18 @@ enum FeatureSpec {
 }
 
 #[derive(serde::Deserialize)]
+#[serde(untagged)]
+pub enum Packages {
+    One(String),
+    Many(Vec<String>),
+}
+
+#[derive(serde::Deserialize)]
 struct MatrixEntry {
     #[serde(default)]
     commands: BTreeMap<String, String>,
     command: Option<String>,
-    package: String,
+    package: Packages,
     target: Targets,
     #[serde(default)]
     features: Vec<FeatureSpec>,
@@ -225,103 +232,117 @@ pub fn run(args: MatrixArgs) -> Result<(), String> {
     }
 
     for entry in &cfg.entries {
-        if !args.packages.is_empty() && !args.packages.iter().any(|p| p == &entry.package) {
-            continue;
-        }
-
-        let cmd_name = entry
-            .command
-            .as_ref()
-            .or(command.as_ref())
-            .ok_or_else(|| "no command selected (pass --command <name>)".to_string())?;
-
-        let template: &str = entry
-            .commands
-            .get(cmd_name)
-            .or_else(|| cfg.commands.get(cmd_name))
-            .map(|s| s.as_str())
-            .unwrap_or(cmd_name);
-
-        let mut combos: Vec<Vec<String>> = vec![Vec::new()];
-        for spec in &entry.features {
-            match spec {
-                FeatureSpec::One(f) => {
-                    for c in &mut combos {
-                        c.push(f.clone());
-                    }
-                }
-                FeatureSpec::OneOf(group) => {
-                    let mut next: Vec<Vec<String>> = Vec::new();
-                    for opt in group {
-                        for c in &combos {
-                            let mut nc = c.clone();
-                            nc.push(opt.clone());
-                            next.push(nc);
-                        }
-                    }
-                    combos = next;
-                }
-            }
-        }
-
-        fn flatten_targets<'a>(t: &'a TargetElem, out: &mut Vec<&'a str>) {
-            match t {
-                TargetElem::One(s) => out.push(s.as_str()),
-                TargetElem::Many(v) => {
-                    for inner in v {
-                        flatten_targets(inner, out);
-                    }
-                }
-            }
-        }
-
-        let targets: Vec<&str> = match &entry.target {
-            Targets::One(t) => vec![t.as_str()],
-            Targets::Many(ts) => {
-                let mut out: Vec<&str> = Vec::new();
-                for t in ts {
-                    flatten_targets(t, &mut out);
-                }
-                out
-            }
+        let entry_packages = match &entry.package {
+            Packages::One(s) => vec![s.as_str()],
+            Packages::Many(v) => v.iter().map(|s| s.as_str()).collect(),
         };
 
-        for target in targets {
-            let target = if target == "host" {
-                host.as_str()
+        for package in entry_packages {
+            if !args.packages.is_empty() && !args.packages.iter().any(|p| p == package) {
+                continue;
+            }
+
+            let cmd_name = entry
+                .command
+                .as_ref()
+                .or(command.as_ref())
+                .ok_or_else(|| "no command selected (pass --command <name>)".to_string())?;
+
+            let template = entry
+                .commands
+                .get(cmd_name)
+                .or_else(|| cfg.commands.get(cmd_name));
+
+            let template: &str = if let Some(t) = template {
+                t.as_str()
             } else {
-                target
+                // Strict Structural Resolution.
+                // If a command is not defined in the package-local or global commands map,
+                // the package is considered to not support this command and is skipped.
+                continue;
             };
-            let total = combos.len();
-            for (idx, mut feats) in combos.iter().cloned().enumerate() {
-                feats.sort();
-                feats.dedup();
-                let feat_str = feats.join(",");
-                let features_flag = if feat_str.is_empty() {
-                    String::new()
+
+            let mut combos: Vec<Vec<String>> = vec![Vec::new()];
+            for spec in &entry.features {
+                match spec {
+                    FeatureSpec::One(f) => {
+                        for c in &mut combos {
+                            c.push(f.clone());
+                        }
+                    }
+                    FeatureSpec::OneOf(group) => {
+                        let mut next: Vec<Vec<String>> = Vec::new();
+                        for opt in group {
+                            for c in &combos {
+                                let mut nc = c.clone();
+                                nc.push(opt.clone());
+                                next.push(nc);
+                            }
+                        }
+                        combos = next;
+                    }
+                }
+            }
+
+            fn flatten_targets<'a>(t: &'a TargetElem, out: &mut Vec<&'a str>) {
+                match t {
+                    TargetElem::One(s) => out.push(s.as_str()),
+                    TargetElem::Many(v) => {
+                        for inner in v {
+                            flatten_targets(inner, out);
+                        }
+                    }
+                }
+            }
+
+            let targets: Vec<&str> = match &entry.target {
+                Targets::One(t) => vec![t.as_str()],
+                Targets::Many(ts) => {
+                    let mut out: Vec<&str> = Vec::new();
+                    for t in ts {
+                        flatten_targets(t, &mut out);
+                    }
+                    out
+                }
+            };
+
+            for target in targets {
+                let target = if target == "host" {
+                    host.as_str()
                 } else {
-                    format!(r##"--features "{feat_str}""##)
+                    target
                 };
+                let total = combos.len();
+                for (idx, mut feats) in combos.iter().cloned().enumerate() {
+                    feats.sort();
+                    feats.dedup();
+                    let feat_str = feats.join(",");
+                    let features_flag = if feat_str.is_empty() {
+                        String::new()
+                    } else {
+                        format!(r##"--features "{feat_str}""##)
+                    };
 
-                let cmd = render_template(
-                    template,
-                    &workspace,
-                    &entry.package,
-                    target,
-                    &feat_str,
-                    &features_flag,
-                );
+                    let cmd = render_template(
+                        template,
+                        &workspace,
+                        package,
+                        target,
+                        &feat_str,
+                        &features_flag,
+                    );
 
-                let suffix = if total > 1 {
-                    format!(" #{}/{}", idx + 1, total)
-                } else {
-                    String::new()
-                };
+                    let suffix = if total > 1 {
+                        format!(" #{}/{}", idx + 1, total)
+                    } else {
+                        String::new()
+                    };
 
-                steps.push(Step {
-                    name: format!("{} [{target}] ({cmd_name}){suffix}", entry.package),
-                    cmd,
-                });
+                    steps.push(Step {
+                        name: format!("{package} [{target}] ({cmd_name}){suffix}"),
+                        cmd,
+                    });
+                }
             }
         }
     }

@@ -34,36 +34,26 @@ guest_targets: &guest_targets
   - *targets_linux_musl_gc
 
 entries:
-  - package: xtask
+  - package:
+      - xtask
+      - cargo-matrix
+      - mini-template
+      - zeroos-build
+      - spike-build
     target:
       - *host_targets
 
-  - package: cargo-matrix
+  - package:
+      - zeroos-debug
+      - zeroos-macros
     target:
       - *host_targets
-
-  - package: mini-template
-    target:
-      - *host_targets
+      - *guest_targets
 
   - package: htif
     target:
       - *targets_none_elf_imac
       - *targets_linux_musl_gc
-
-  - package: zeroos-build
-    target:
-      - *host_targets
-
-  - package: zeroos-debug
-    target:
-      - *host_targets
-      - *guest_targets
-
-  - package: zeroos-macros
-    target:
-      - *host_targets
-      - *guest_targets
 
   - package: zeroos-foundation
     target:
@@ -94,43 +84,25 @@ entries:
     features:
       - memory
 
-  - package: zeroos-runtime-musl
+  - package:
+      - zeroos-runtime-musl
+      - zeroos-runtime-gnu
     target:
       - *targets_linux_musl_gc
 
-  - package: zeroos-runtime-gnu
-    target:
-      - *targets_linux_musl_gc
-
-  - package: zeroos-allocator-bump
+  - package:
+      - zeroos-allocator-bump
+      - zeroos-allocator-linked-list
+      - zeroos-allocator-buddy
     target:
       - *guest_targets
 
-  - package: zeroos-allocator-linked-list
-    target:
-      - *guest_targets
-
-  - package: zeroos-allocator-buddy
-    target:
-      - *guest_targets
-
-  - package: zeroos-vfs-core
-    target:
-      - *targets_linux_musl_gc
-
-  - package: zeroos-device-console
-    target:
-      - *targets_linux_musl_gc
-
-  - package: zeroos-device-null
-    target:
-      - *targets_linux_musl_gc
-
-  - package: zeroos-device-urandom
-    target:
-      - *targets_linux_musl_gc
-
-  - package: zeroos-device-zero
+  - package:
+      - zeroos-device-console
+      - zeroos-device-null
+      - zeroos-device-urandom
+      - zeroos-device-zero
+      - zeroos-vfs-core
     target:
       - *targets_linux_musl_gc
 
@@ -216,7 +188,8 @@ entries:
       - thread
 
   - package: fibonacci
-    target: riscv64imac-unknown-none-elf
+    target:
+      - riscv64imac-unknown-none-elf
     commands:
       build: >-
         cargo spike build --package {package} --target "{target}" -- {features_flag} --quiet

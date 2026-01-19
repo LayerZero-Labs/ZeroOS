@@ -1,11 +1,11 @@
-name: 'Setup Rust Environment'
-description: 'Sets up Rust toolchain with caching'
+name: "Setup Rust Environment"
+description: "Sets up Rust toolchain with caching"
 
 runs:
-  using: 'composite'
+  using: "composite"
   steps:
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@c5a29ddb4d9d194e7c84ec8c3fba61b1c31fee8c
+      uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561
       with:
         toolchain: stable
 
@@ -19,4 +19,3 @@ runs:
       with:
         # Optional: cache dependencies as well
         cache-on-failure: true
-        

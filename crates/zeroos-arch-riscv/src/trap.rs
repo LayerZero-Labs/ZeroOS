@@ -305,6 +305,7 @@ mod imp {
 
 pub use imp::_default_trap_handler;
 
+#[cfg(not(target_os = "none"))]
 global_asm!(
     ".align 2",
     ".weak _trap_handler",

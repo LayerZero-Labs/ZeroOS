@@ -11,7 +11,7 @@ BIN="${OUT_DIR}/std-smoke"
 cd "${ROOT}"
 
 echo "Building std-smoke example..."
-cargo spike build -p std-smoke --target "${TARGET_TRIPLE}" --mode std --backtrace=enable -- --quiet --features=std,backtrace --profile "${PROFILE}"
+cargo spike build -p std-smoke --target "${TARGET_TRIPLE}" --mode std --backtrace=enable --memory-size=40MiB --stack-size=4MiB --heap-size=8MiB -- --features=std,backtrace,with-spike --profile "${PROFILE}"
 
 echo "Running on Spike simulator..."
 OUT="$(mktemp)"

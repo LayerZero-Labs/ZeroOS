@@ -2,8 +2,6 @@
 //!
 //! We do this from `.init_array` so it runs after musl's `__init_libc` (malloc/env are ready)
 //! but before `main`, avoiding early-boot allocations/faults.
-#![cfg(feature = "backtrace")]
-
 extern "C" {
     // libgcc frame registration API (DWARF2 unwinder)
     fn __register_frame(begin: *const u8);

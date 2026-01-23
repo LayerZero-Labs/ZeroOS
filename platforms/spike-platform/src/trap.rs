@@ -68,7 +68,7 @@ pub unsafe extern "C" fn trap_handler(regs: *mut u8) {
             advance_mepc_for_breakpoint(regs);
         }
         code => {
-            htif::exit(code as u32);
+            foundation::kfn::kexit(code as i32);
         }
     }
 }

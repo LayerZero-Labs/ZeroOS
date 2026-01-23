@@ -73,6 +73,17 @@ pub fn build_binary(
     toolchain_paths: Option<(PathBuf, PathBuf)>,
     linker_template: Option<String>,
 ) -> Result<()> {
+    build_binary_with_rustflags(workspace_root, args, toolchain_paths, linker_template, None)
+}
+
+/// Build binary with optional additional rustflags (for platform-specific flags)
+pub fn build_binary_with_rustflags(
+    workspace_root: &PathBuf,
+    args: &BuildArgs,
+    toolchain_paths: Option<(PathBuf, PathBuf)>,
+    linker_template: Option<String>,
+    additional_rustflags: Option<&[&str]>,
+) -> Result<()> {
     info!(
         "Building binary for {:?} mode (fully: {})",
         args.mode, args.fully
@@ -193,6 +204,13 @@ pub fn build_binary(
         rustflags_parts.push("-C".to_string());
         rustflags_parts.push(format!("link-arg={}", arg));
         rustflags_parts.push("-Zmacro-backtrace".to_string());
+    }
+
+    // Add platform-specific rustflags
+    if let Some(flags) = additional_rustflags {
+        for flag in flags {
+            rustflags_parts.push(flag.to_string());
+        }
     }
 
     let encoded_rustflags = rustflags_parts.join("\x1f");

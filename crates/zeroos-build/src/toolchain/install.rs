@@ -63,40 +63,6 @@ fn host_arch() -> &'static str {
     }
 }
 
-fn default_repo_from_git() -> Option<String> {
-    let out = Command::new("git")
-        .args(["config", "--get", "remote.origin.url"])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    let url = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if url.is_empty() {
-        return None;
-    }
-
-    // https://github.com/ORG/REPO.git
-    if let Some(rest) = url.strip_prefix("https://github.com/") {
-        let rest = rest.strip_suffix(".git").unwrap_or(rest);
-        let mut parts = rest.split('/');
-        let owner = parts.next()?;
-        let repo = parts.next()?;
-        return Some(format!("{}/{}", owner, repo));
-    }
-
-    // git@github.com:ORG/REPO.git
-    if let Some(rest) = url.strip_prefix("git@github.com:") {
-        let rest = rest.strip_suffix(".git").unwrap_or(rest);
-        let mut parts = rest.split('/');
-        let owner = parts.next()?;
-        let repo = parts.next()?;
-        return Some(format!("{}/{}", owner, repo));
-    }
-
-    None
-}
-
 fn run(cmd: &mut Command) -> Result<(), String> {
     debug!("Running command: {:?}", cmd);
     let status = cmd
@@ -214,7 +180,6 @@ pub fn install_musl_toolchain(config: &InstallConfig) -> Result<ToolchainPaths, 
         .repo
         .clone()
         .or_else(|| std::env::var("ZEROOS_MUSL_TOOLCHAIN_REPO").ok())
-        .or_else(default_repo_from_git)
         .unwrap_or_else(|| "LayerZero-Labs/ZeroOS".to_string());
 
     let output_dir = PathBuf::from(&config.output_dir);

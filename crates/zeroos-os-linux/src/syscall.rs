@@ -181,6 +181,35 @@ sys_registry! {
     }
 }
 
+/// Returns the name of a syscall given its number.
+pub fn syscall_name(nr: usize) -> &'static str {
+    match nr as i64 {
+        SYS_exit => "SYS_exit",
+        SYS_exit_group => "SYS_exit_group",
+        SYS_clone => "SYS_clone",
+        SYS_futex => "SYS_futex",
+        SYS_sched_yield => "SYS_sched_yield",
+        SYS_getpid => "SYS_getpid",
+        SYS_gettid => "SYS_gettid",
+        SYS_set_tid_address => "SYS_set_tid_address",
+        SYS_brk => "SYS_brk",
+        SYS_mmap => "SYS_mmap",
+        SYS_munmap => "SYS_munmap",
+        SYS_mprotect => "SYS_mprotect",
+        SYS_openat => "SYS_openat",
+        SYS_close => "SYS_close",
+        SYS_read => "SYS_read",
+        SYS_write => "SYS_write",
+        SYS_readv => "SYS_readv",
+        SYS_writev => "SYS_writev",
+        SYS_lseek => "SYS_lseek",
+        SYS_ioctl => "SYS_ioctl",
+        SYS_fstat => "SYS_fstat",
+        SYS_getrandom => "SYS_getrandom",
+        _ => "SYS_unknown",
+    }
+}
+
 /// # Safety
 /// `regs` must be a valid pointer to a syscall frame.
 pub unsafe fn dispatch_syscall<Frame: SyscallFrame>(regs: *mut Frame) {

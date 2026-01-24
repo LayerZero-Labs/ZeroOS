@@ -7,6 +7,9 @@ pub use foundation;
 
 pub use zeroos_macros as macros;
 
+#[cfg(feature = "debug")]
+pub extern crate debug;
+
 #[cfg(feature = "arch-riscv")]
 pub extern crate arch_riscv;
 

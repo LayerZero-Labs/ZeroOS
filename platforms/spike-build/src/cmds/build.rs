@@ -46,23 +46,15 @@ pub fn build_command(args: SpikeBuildArgs) -> Result<()> {
     let toolchain_paths = if args.base.mode == StdMode::Std || fully {
         let tc_cfg = build::toolchain::ToolchainConfig::default();
         let install_cfg = build::toolchain::InstallConfig::default();
-        let paths = match build::toolchain::get_or_install_toolchain(
+        let paths = build::toolchain::get_or_install_or_build_toolchain(
             args.base.musl_lib_path.clone(),
             args.base.gcc_lib_path.clone(),
             &tc_cfg,
             &install_cfg,
-        ) {
-            Ok(p) => (p.musl_lib, p.gcc_lib),
-            Err(e) => {
-                eprintln!("Toolchain install failed: {}", e);
-                eprintln!("Falling back to building toolchain from source...");
-                build::cmds::get_or_build_toolchain(
-                    args.base.musl_lib_path.clone(),
-                    args.base.gcc_lib_path.clone(),
-                    fully,
-                )?
-            }
-        };
+            fully,
+        )
+        .map(|p| (p.musl_lib, p.gcc_lib))
+        .map_err(|e| anyhow::anyhow!("Toolchain setup failed: {}", e))?;
         Some(paths)
     } else {
         None

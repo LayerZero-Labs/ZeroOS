@@ -184,28 +184,309 @@ sys_registry! {
 /// Returns the name of a syscall given its number.
 pub fn syscall_name(nr: usize) -> &'static str {
     match nr as i64 {
+        // Process control
         SYS_exit => "SYS_exit",
         SYS_exit_group => "SYS_exit_group",
         SYS_clone => "SYS_clone",
-        SYS_futex => "SYS_futex",
-        SYS_sched_yield => "SYS_sched_yield",
+        SYS_clone3 => "SYS_clone3",
+        SYS_execve => "SYS_execve",
+        SYS_execveat => "SYS_execveat",
+        SYS_wait4 => "SYS_wait4",
+        SYS_waitid => "SYS_waitid",
+        SYS_kill => "SYS_kill",
+        SYS_tkill => "SYS_tkill",
+        SYS_tgkill => "SYS_tgkill",
         SYS_getpid => "SYS_getpid",
+        SYS_getppid => "SYS_getppid",
         SYS_gettid => "SYS_gettid",
         SYS_set_tid_address => "SYS_set_tid_address",
+        SYS_prctl => "SYS_prctl",
+        SYS_ptrace => "SYS_ptrace",
+
+        // Thread/futex
+        SYS_futex => "SYS_futex",
+        SYS_get_robust_list => "SYS_get_robust_list",
+        SYS_set_robust_list => "SYS_set_robust_list",
+
+        // Scheduling
+        SYS_sched_yield => "SYS_sched_yield",
+        SYS_sched_getaffinity => "SYS_sched_getaffinity",
+        SYS_sched_setaffinity => "SYS_sched_setaffinity",
+        SYS_sched_getparam => "SYS_sched_getparam",
+        SYS_sched_setparam => "SYS_sched_setparam",
+        SYS_sched_getscheduler => "SYS_sched_getscheduler",
+        SYS_sched_setscheduler => "SYS_sched_setscheduler",
+        SYS_sched_get_priority_max => "SYS_sched_get_priority_max",
+        SYS_sched_get_priority_min => "SYS_sched_get_priority_min",
+        SYS_sched_rr_get_interval => "SYS_sched_rr_get_interval",
+
+        // Memory management
         SYS_brk => "SYS_brk",
         SYS_mmap => "SYS_mmap",
         SYS_munmap => "SYS_munmap",
         SYS_mprotect => "SYS_mprotect",
+        SYS_mremap => "SYS_mremap",
+        SYS_madvise => "SYS_madvise",
+        SYS_mlock => "SYS_mlock",
+        SYS_mlock2 => "SYS_mlock2",
+        SYS_munlock => "SYS_munlock",
+        SYS_mlockall => "SYS_mlockall",
+        SYS_munlockall => "SYS_munlockall",
+        SYS_msync => "SYS_msync",
+        SYS_mincore => "SYS_mincore",
+        SYS_membarrier => "SYS_membarrier",
+
+        // File operations
         SYS_openat => "SYS_openat",
+        SYS_openat2 => "SYS_openat2",
         SYS_close => "SYS_close",
+        SYS_close_range => "SYS_close_range",
         SYS_read => "SYS_read",
         SYS_write => "SYS_write",
         SYS_readv => "SYS_readv",
         SYS_writev => "SYS_writev",
+        SYS_pread64 => "SYS_pread64",
+        SYS_pwrite64 => "SYS_pwrite64",
+        SYS_preadv => "SYS_preadv",
+        SYS_pwritev => "SYS_pwritev",
+        SYS_preadv2 => "SYS_preadv2",
+        SYS_pwritev2 => "SYS_pwritev2",
         SYS_lseek => "SYS_lseek",
         SYS_ioctl => "SYS_ioctl",
+        SYS_fcntl => "SYS_fcntl",
+        SYS_dup => "SYS_dup",
+        SYS_dup3 => "SYS_dup3",
+        SYS_flock => "SYS_flock",
+        SYS_fsync => "SYS_fsync",
+        SYS_fdatasync => "SYS_fdatasync",
+        SYS_ftruncate => "SYS_ftruncate",
+        SYS_fallocate => "SYS_fallocate",
+        SYS_fadvise64 => "SYS_fadvise64",
+        SYS_readahead => "SYS_readahead",
+        SYS_sendfile => "SYS_sendfile",
+        SYS_splice => "SYS_splice",
+        SYS_tee => "SYS_tee",
+        SYS_vmsplice => "SYS_vmsplice",
+        SYS_copy_file_range => "SYS_copy_file_range",
+
+        // File stat/metadata
         SYS_fstat => "SYS_fstat",
+        SYS_newfstatat => "SYS_newfstatat",
+        SYS_statx => "SYS_statx",
+        SYS_faccessat => "SYS_faccessat",
+        SYS_faccessat2 => "SYS_faccessat2",
+        SYS_fchmod => "SYS_fchmod",
+        SYS_fchmodat => "SYS_fchmodat",
+        SYS_fchown => "SYS_fchown",
+        SYS_fchownat => "SYS_fchownat",
+        SYS_utimensat => "SYS_utimensat",
+
+        // Directory operations
+        SYS_getdents64 => "SYS_getdents64",
+        SYS_getcwd => "SYS_getcwd",
+        SYS_chdir => "SYS_chdir",
+        SYS_fchdir => "SYS_fchdir",
+        SYS_mkdirat => "SYS_mkdirat",
+        SYS_mknodat => "SYS_mknodat",
+        SYS_unlinkat => "SYS_unlinkat",
+        SYS_renameat => "SYS_renameat",
+        SYS_renameat2 => "SYS_renameat2",
+        SYS_linkat => "SYS_linkat",
+        SYS_symlinkat => "SYS_symlinkat",
+        SYS_readlinkat => "SYS_readlinkat",
+        SYS_pivot_root => "SYS_pivot_root",
+        SYS_mount => "SYS_mount",
+        SYS_umount2 => "SYS_umount2",
+
+        // File descriptors / poll
+        SYS_ppoll => "SYS_ppoll",
+        SYS_pselect6 => "SYS_pselect6",
+        SYS_epoll_create1 => "SYS_epoll_create1",
+        SYS_epoll_ctl => "SYS_epoll_ctl",
+        SYS_epoll_pwait => "SYS_epoll_pwait",
+        SYS_epoll_pwait2 => "SYS_epoll_pwait2",
+        SYS_eventfd2 => "SYS_eventfd2",
+        SYS_signalfd4 => "SYS_signalfd4",
+        SYS_timerfd_create => "SYS_timerfd_create",
+        SYS_timerfd_settime => "SYS_timerfd_settime",
+        SYS_timerfd_gettime => "SYS_timerfd_gettime",
+        SYS_inotify_init1 => "SYS_inotify_init1",
+        SYS_inotify_add_watch => "SYS_inotify_add_watch",
+        SYS_inotify_rm_watch => "SYS_inotify_rm_watch",
+        SYS_fanotify_init => "SYS_fanotify_init",
+        SYS_fanotify_mark => "SYS_fanotify_mark",
+
+        // Pipes
+        SYS_pipe2 => "SYS_pipe2",
+
+        // Sockets
+        SYS_socket => "SYS_socket",
+        SYS_socketpair => "SYS_socketpair",
+        SYS_bind => "SYS_bind",
+        SYS_listen => "SYS_listen",
+        SYS_accept => "SYS_accept",
+        SYS_accept4 => "SYS_accept4",
+        SYS_connect => "SYS_connect",
+        SYS_getsockname => "SYS_getsockname",
+        SYS_getpeername => "SYS_getpeername",
+        SYS_sendto => "SYS_sendto",
+        SYS_recvfrom => "SYS_recvfrom",
+        SYS_sendmsg => "SYS_sendmsg",
+        SYS_recvmsg => "SYS_recvmsg",
+        SYS_sendmmsg => "SYS_sendmmsg",
+        SYS_recvmmsg => "SYS_recvmmsg",
+        SYS_shutdown => "SYS_shutdown",
+        SYS_setsockopt => "SYS_setsockopt",
+        SYS_getsockopt => "SYS_getsockopt",
+
+        // Signals
+        SYS_rt_sigaction => "SYS_rt_sigaction",
+        SYS_rt_sigprocmask => "SYS_rt_sigprocmask",
+        SYS_rt_sigreturn => "SYS_rt_sigreturn",
+        SYS_rt_sigsuspend => "SYS_rt_sigsuspend",
+        SYS_rt_sigpending => "SYS_rt_sigpending",
+        SYS_rt_sigtimedwait => "SYS_rt_sigtimedwait",
+        SYS_rt_sigqueueinfo => "SYS_rt_sigqueueinfo",
+        SYS_rt_tgsigqueueinfo => "SYS_rt_tgsigqueueinfo",
+        SYS_sigaltstack => "SYS_sigaltstack",
+
+        // Time
+        SYS_clock_gettime => "SYS_clock_gettime",
+        SYS_clock_settime => "SYS_clock_settime",
+        SYS_clock_getres => "SYS_clock_getres",
+        SYS_clock_nanosleep => "SYS_clock_nanosleep",
+        SYS_gettimeofday => "SYS_gettimeofday",
+        SYS_settimeofday => "SYS_settimeofday",
+        SYS_nanosleep => "SYS_nanosleep",
+        SYS_times => "SYS_times",
+        SYS_timer_create => "SYS_timer_create",
+        SYS_timer_settime => "SYS_timer_settime",
+        SYS_timer_gettime => "SYS_timer_gettime",
+        SYS_timer_getoverrun => "SYS_timer_getoverrun",
+        SYS_timer_delete => "SYS_timer_delete",
+
+        // User/group IDs
+        SYS_getuid => "SYS_getuid",
+        SYS_geteuid => "SYS_geteuid",
+        SYS_getgid => "SYS_getgid",
+        SYS_getegid => "SYS_getegid",
+        SYS_setuid => "SYS_setuid",
+        SYS_setgid => "SYS_setgid",
+        SYS_setreuid => "SYS_setreuid",
+        SYS_setregid => "SYS_setregid",
+        SYS_setresuid => "SYS_setresuid",
+        SYS_setresgid => "SYS_setresgid",
+        SYS_getresuid => "SYS_getresuid",
+        SYS_getresgid => "SYS_getresgid",
+        SYS_setfsuid => "SYS_setfsuid",
+        SYS_setfsgid => "SYS_setfsgid",
+        SYS_getgroups => "SYS_getgroups",
+        SYS_setgroups => "SYS_setgroups",
+
+        // Session/process group
+        SYS_setsid => "SYS_setsid",
+        SYS_getsid => "SYS_getsid",
+        SYS_setpgid => "SYS_setpgid",
+        SYS_getpgid => "SYS_getpgid",
+
+        // Resource limits
+        SYS_getrlimit => "SYS_getrlimit",
+        SYS_setrlimit => "SYS_setrlimit",
+        SYS_prlimit64 => "SYS_prlimit64",
+        SYS_getrusage => "SYS_getrusage",
+
+        // System info
+        SYS_uname => "SYS_uname",
+        SYS_sysinfo => "SYS_sysinfo",
+        SYS_syslog => "SYS_syslog",
         SYS_getrandom => "SYS_getrandom",
+
+        // Capabilities
+        SYS_capget => "SYS_capget",
+        SYS_capset => "SYS_capset",
+
+        // Misc
+        SYS_umask => "SYS_umask",
+        SYS_personality => "SYS_personality",
+        SYS_reboot => "SYS_reboot",
+        SYS_sync => "SYS_sync",
+        SYS_syncfs => "SYS_syncfs",
+        SYS_statfs => "SYS_statfs",
+        SYS_fstatfs => "SYS_fstatfs",
+
+        // io_uring
+        SYS_io_uring_setup => "SYS_io_uring_setup",
+        SYS_io_uring_enter => "SYS_io_uring_enter",
+        SYS_io_uring_register => "SYS_io_uring_register",
+
+        // Async I/O (legacy)
+        SYS_io_setup => "SYS_io_setup",
+        SYS_io_destroy => "SYS_io_destroy",
+        SYS_io_submit => "SYS_io_submit",
+        SYS_io_cancel => "SYS_io_cancel",
+        SYS_io_getevents => "SYS_io_getevents",
+        SYS_io_pgetevents => "SYS_io_pgetevents",
+
+        // Shared memory
+        SYS_shmget => "SYS_shmget",
+        SYS_shmat => "SYS_shmat",
+        SYS_shmdt => "SYS_shmdt",
+        SYS_shmctl => "SYS_shmctl",
+
+        // Semaphores
+        SYS_semget => "SYS_semget",
+        SYS_semop => "SYS_semop",
+        SYS_semtimedop => "SYS_semtimedop",
+        SYS_semctl => "SYS_semctl",
+
+        // Message queues
+        SYS_msgget => "SYS_msgget",
+        SYS_msgsnd => "SYS_msgsnd",
+        SYS_msgrcv => "SYS_msgrcv",
+        SYS_msgctl => "SYS_msgctl",
+        SYS_mq_open => "SYS_mq_open",
+        SYS_mq_unlink => "SYS_mq_unlink",
+        SYS_mq_timedsend => "SYS_mq_timedsend",
+        SYS_mq_timedreceive => "SYS_mq_timedreceive",
+        SYS_mq_notify => "SYS_mq_notify",
+        SYS_mq_getsetattr => "SYS_mq_getsetattr",
+
+        // Keys
+        SYS_add_key => "SYS_add_key",
+        SYS_request_key => "SYS_request_key",
+        SYS_keyctl => "SYS_keyctl",
+
+        // Extended attributes
+        SYS_setxattr => "SYS_setxattr",
+        SYS_lsetxattr => "SYS_lsetxattr",
+        SYS_fsetxattr => "SYS_fsetxattr",
+        SYS_getxattr => "SYS_getxattr",
+        SYS_lgetxattr => "SYS_lgetxattr",
+        SYS_fgetxattr => "SYS_fgetxattr",
+        SYS_listxattr => "SYS_listxattr",
+        SYS_llistxattr => "SYS_llistxattr",
+        SYS_flistxattr => "SYS_flistxattr",
+        SYS_removexattr => "SYS_removexattr",
+        SYS_lremovexattr => "SYS_lremovexattr",
+        SYS_fremovexattr => "SYS_fremovexattr",
+
+        // Namespaces
+        SYS_setns => "SYS_setns",
+        SYS_unshare => "SYS_unshare",
+
+        // Misc newer syscalls
+        SYS_seccomp => "SYS_seccomp",
+        SYS_bpf => "SYS_bpf",
+        SYS_userfaultfd => "SYS_userfaultfd",
+        SYS_perf_event_open => "SYS_perf_event_open",
+        SYS_pidfd_open => "SYS_pidfd_open",
+        SYS_pidfd_send_signal => "SYS_pidfd_send_signal",
+        SYS_pidfd_getfd => "SYS_pidfd_getfd",
+
+        // Architecture-specific (riscv64)
+        #[cfg(target_arch = "riscv64")]
+        SYS_riscv_flush_icache => "SYS_riscv_flush_icache",
+
         _ => "SYS_unknown",
     }
 }

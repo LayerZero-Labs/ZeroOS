@@ -182,6 +182,10 @@ sys_registry! {
 }
 
 /// Returns the name of a syscall given its number.
+///
+/// Only includes syscalls available on riscv64 (the primary target for zeroos-os-linux).
+#[cfg(any(target_arch = "riscv64", target_arch = "riscv32"))]
+#[allow(non_snake_case)]
 pub fn syscall_name(nr: usize) -> &'static str {
     match nr as i64 {
         // Process control
@@ -259,6 +263,7 @@ pub fn syscall_name(nr: usize) -> &'static str {
         SYS_flock => "SYS_flock",
         SYS_fsync => "SYS_fsync",
         SYS_fdatasync => "SYS_fdatasync",
+        SYS_truncate => "SYS_truncate",
         SYS_ftruncate => "SYS_ftruncate",
         SYS_fallocate => "SYS_fallocate",
         SYS_fadvise64 => "SYS_fadvise64",
@@ -266,6 +271,7 @@ pub fn syscall_name(nr: usize) -> &'static str {
         SYS_sendfile => "SYS_sendfile",
         SYS_splice => "SYS_splice",
         SYS_tee => "SYS_tee",
+        SYS_sync_file_range => "SYS_sync_file_range",
         SYS_vmsplice => "SYS_vmsplice",
         SYS_copy_file_range => "SYS_copy_file_range",
 
@@ -289,7 +295,6 @@ pub fn syscall_name(nr: usize) -> &'static str {
         SYS_mkdirat => "SYS_mkdirat",
         SYS_mknodat => "SYS_mknodat",
         SYS_unlinkat => "SYS_unlinkat",
-        SYS_renameat => "SYS_renameat",
         SYS_renameat2 => "SYS_renameat2",
         SYS_linkat => "SYS_linkat",
         SYS_symlinkat => "SYS_symlinkat",
@@ -297,6 +302,7 @@ pub fn syscall_name(nr: usize) -> &'static str {
         SYS_pivot_root => "SYS_pivot_root",
         SYS_mount => "SYS_mount",
         SYS_umount2 => "SYS_umount2",
+        SYS_chroot => "SYS_chroot",
 
         // File descriptors / poll
         SYS_ppoll => "SYS_ppoll",
@@ -355,9 +361,13 @@ pub fn syscall_name(nr: usize) -> &'static str {
         SYS_clock_settime => "SYS_clock_settime",
         SYS_clock_getres => "SYS_clock_getres",
         SYS_clock_nanosleep => "SYS_clock_nanosleep",
+        SYS_clock_adjtime => "SYS_clock_adjtime",
         SYS_gettimeofday => "SYS_gettimeofday",
         SYS_settimeofday => "SYS_settimeofday",
+        SYS_adjtimex => "SYS_adjtimex",
         SYS_nanosleep => "SYS_nanosleep",
+        SYS_getitimer => "SYS_getitimer",
+        SYS_setitimer => "SYS_setitimer",
         SYS_times => "SYS_times",
         SYS_timer_create => "SYS_timer_create",
         SYS_timer_settime => "SYS_timer_settime",
@@ -388,18 +398,22 @@ pub fn syscall_name(nr: usize) -> &'static str {
         SYS_getsid => "SYS_getsid",
         SYS_setpgid => "SYS_setpgid",
         SYS_getpgid => "SYS_getpgid",
+        SYS_vhangup => "SYS_vhangup",
 
         // Resource limits
         SYS_getrlimit => "SYS_getrlimit",
         SYS_setrlimit => "SYS_setrlimit",
         SYS_prlimit64 => "SYS_prlimit64",
         SYS_getrusage => "SYS_getrusage",
+        SYS_getpriority => "SYS_getpriority",
+        SYS_setpriority => "SYS_setpriority",
 
         // System info
         SYS_uname => "SYS_uname",
         SYS_sysinfo => "SYS_sysinfo",
         SYS_syslog => "SYS_syslog",
         SYS_getrandom => "SYS_getrandom",
+        SYS_getcpu => "SYS_getcpu",
 
         // Capabilities
         SYS_capget => "SYS_capget",
@@ -413,6 +427,22 @@ pub fn syscall_name(nr: usize) -> &'static str {
         SYS_syncfs => "SYS_syncfs",
         SYS_statfs => "SYS_statfs",
         SYS_fstatfs => "SYS_fstatfs",
+        SYS_swapon => "SYS_swapon",
+        SYS_swapoff => "SYS_swapoff",
+        SYS_sethostname => "SYS_sethostname",
+        SYS_setdomainname => "SYS_setdomainname",
+        SYS_acct => "SYS_acct",
+        SYS_quotactl => "SYS_quotactl",
+        SYS_nfsservctl => "SYS_nfsservctl",
+        SYS_lookup_dcookie => "SYS_lookup_dcookie",
+        SYS_remap_file_pages => "SYS_remap_file_pages",
+        SYS_restart_syscall => "SYS_restart_syscall",
+
+        // Modules
+        SYS_init_module => "SYS_init_module",
+        SYS_delete_module => "SYS_delete_module",
+        SYS_finit_module => "SYS_finit_module",
+        SYS_kexec_load => "SYS_kexec_load",
 
         // io_uring
         SYS_io_uring_setup => "SYS_io_uring_setup",
@@ -474,21 +504,67 @@ pub fn syscall_name(nr: usize) -> &'static str {
         SYS_setns => "SYS_setns",
         SYS_unshare => "SYS_unshare",
 
-        // Misc newer syscalls
+        // NUMA
+        SYS_mbind => "SYS_mbind",
+        SYS_set_mempolicy => "SYS_set_mempolicy",
+        SYS_get_mempolicy => "SYS_get_mempolicy",
+        SYS_migrate_pages => "SYS_migrate_pages",
+        SYS_move_pages => "SYS_move_pages",
+
+        // Priority I/O
+        SYS_ioprio_set => "SYS_ioprio_set",
+        SYS_ioprio_get => "SYS_ioprio_get",
+
+        // Process VM
+        SYS_process_vm_readv => "SYS_process_vm_readv",
+        SYS_process_vm_writev => "SYS_process_vm_writev",
+        SYS_process_madvise => "SYS_process_madvise",
+        SYS_kcmp => "SYS_kcmp",
+
+        // Scheduling (newer)
+        SYS_sched_setattr => "SYS_sched_setattr",
+        SYS_sched_getattr => "SYS_sched_getattr",
+
+        // Memory (newer)
+        SYS_memfd_create => "SYS_memfd_create",
+        SYS_pkey_mprotect => "SYS_pkey_mprotect",
+        SYS_pkey_alloc => "SYS_pkey_alloc",
+        SYS_pkey_free => "SYS_pkey_free",
+        SYS_rseq => "SYS_rseq",
+
+        // Mount (newer)
+        SYS_open_tree => "SYS_open_tree",
+        SYS_move_mount => "SYS_move_mount",
+        SYS_fsopen => "SYS_fsopen",
+        SYS_fsconfig => "SYS_fsconfig",
+        SYS_fsmount => "SYS_fsmount",
+        SYS_fspick => "SYS_fspick",
+        SYS_mount_setattr => "SYS_mount_setattr",
+        SYS_name_to_handle_at => "SYS_name_to_handle_at",
+        SYS_open_by_handle_at => "SYS_open_by_handle_at",
+
+        // Security
         SYS_seccomp => "SYS_seccomp",
         SYS_bpf => "SYS_bpf",
+        SYS_landlock_create_ruleset => "SYS_landlock_create_ruleset",
+        SYS_landlock_add_rule => "SYS_landlock_add_rule",
+        SYS_landlock_restrict_self => "SYS_landlock_restrict_self",
+
+        // Misc newer syscalls
         SYS_userfaultfd => "SYS_userfaultfd",
         SYS_perf_event_open => "SYS_perf_event_open",
         SYS_pidfd_open => "SYS_pidfd_open",
         SYS_pidfd_send_signal => "SYS_pidfd_send_signal",
         SYS_pidfd_getfd => "SYS_pidfd_getfd",
 
-        // Architecture-specific (riscv64)
-        #[cfg(target_arch = "riscv64")]
-        SYS_riscv_flush_icache => "SYS_riscv_flush_icache",
-
         _ => "SYS_unknown",
     }
+}
+
+/// Fallback for non-riscv targets (for cross-compilation).
+#[cfg(not(any(target_arch = "riscv64", target_arch = "riscv32")))]
+pub fn syscall_name(_nr: usize) -> &'static str {
+    "SYS_unknown"
 }
 
 /// # Safety

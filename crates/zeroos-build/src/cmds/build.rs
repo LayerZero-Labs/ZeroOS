@@ -193,6 +193,12 @@ pub fn build_binary_with_rustflags(
         .map(|s| s.split('\x1f').map(|s| s.to_string()).collect())
         .unwrap_or_default();
 
+    if let Ok(rustflags) = std::env::var("RUSTFLAGS") {
+        for flag in rustflags.split_whitespace() {
+            rustflags_parts.push(flag.to_string());
+        }
+    }
+
     // In unwind-table-based backtraces, we need DWARF CFI tables even with `panic=abort`.
     // This forces `.eh_frame` emission for Rust code when backtraces are enabled.
     if args.mode == StdMode::Std && backtrace_enabled {

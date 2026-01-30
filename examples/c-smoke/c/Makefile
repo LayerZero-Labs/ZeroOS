@@ -5,7 +5,10 @@ CFLAGS ?= -O2 -g -march=rv64imac -mabi=lp64 -ffreestanding -nostdlib -mcmodel=me
 LINKER ?= linker.ld
 LIB_DIR ?= $(HOME)/.zeroos/musl/riscv64-linux-musl/lib
 LDFLAGS ?= -T $(LINKER) -nostdlib -static -L $(LIB_DIR) -Wl,--gc-sections
-LDLIBS ?= -lc -lgcc -lpthread
+# NOTE: For static linking, library order matters. libgcc can introduce new
+# undefined symbols (e.g. pthread_* from unwind code). In practice, libc, libgcc
+# and libpthread can form a cyclic dependency set, so we link them as a group.
+LDLIBS ?= -Wl,--start-group -lc -lgcc -lpthread -Wl,--end-group
 OUTPUT_DIR ?= $(PWD)/build
 BIN := $(OUTPUT_DIR)/c-smoke
 OBJ := $(OUTPUT_DIR)/main.o

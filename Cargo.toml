@@ -30,6 +30,7 @@ members = [
   "examples/fibonacci",
   "examples/syscall-cycles",
   "examples/std-smoke",
+  "examples/backtrace",
   "examples/c-smoke/rust",
 ]
 resolver = "2"

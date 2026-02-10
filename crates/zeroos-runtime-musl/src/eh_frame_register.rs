@@ -12,8 +12,8 @@ extern "C" {
 
 #[no_mangle]
 extern "C" fn __zeroos_register_eh_frame() {
-    let start = core::ptr::addr_of!(__eh_frame_start) as *const u8;
-    let end = core::ptr::addr_of!(__eh_frame_end) as *const u8;
+    let start = core::ptr::addr_of!(__eh_frame_start);
+    let end = core::ptr::addr_of!(__eh_frame_end);
     if start != end {
         unsafe { __register_frame(start) };
     }

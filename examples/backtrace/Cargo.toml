@@ -1,0 +1,29 @@
+[package]
+name = "backtrace"
+publish = false
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+platform.workspace = true
+debug.workspace = true
+cfg-if.workspace = true
+
+[features]
+default = []
+
+debug = ["platform/debug"]
+backtrace = ["platform/backtrace"]
+
+std = [
+  "platform/std",
+  "platform/vfs-device-console",
+  "platform/memory",
+  "platform/bounds-checks",
+  "platform/backtrace",
+]
+
+with-spike = ["platform/with-spike"]
+
+[target.'cfg(target_os = "none")'.dependencies]
+platform = { workspace = true, features = ["memory"] }

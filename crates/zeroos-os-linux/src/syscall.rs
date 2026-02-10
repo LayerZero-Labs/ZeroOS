@@ -139,6 +139,10 @@ sys_registry! {
     // Always-supported syscalls (core process control).
     (SYS_exit, handlers::sys_exit, 1),
     (SYS_exit_group, handlers::sys_exit_group, 1),
+    (SYS_rt_sigaction, handlers::signal::sys_rt_sigaction, 4),
+    (SYS_rt_sigprocmask, handlers::signal::sys_rt_sigprocmask, 4),
+    (SYS_tkill, handlers::signal::sys_tkill, 2),
+    (SYS_tgkill, handlers::signal::sys_tgkill, 3),
 
     // Scheduler/sys-thread syscalls.
     #[cfg(feature = "scheduler")]

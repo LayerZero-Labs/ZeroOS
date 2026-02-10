@@ -33,9 +33,10 @@ os-linux = ["dep:os-linux", "foundation/trap"]
 runtime-nostd = ["dep:runtime-nostd"]
 runtime-musl = ["dep:runtime-musl"]
 runtime-gnu = ["dep:runtime-gnu"]
+panic = ["runtime-nostd?/panic"]
 
 # Backtraces
-backtrace = ["runtime-musl?/backtrace"]
+backtrace = ["runtime-musl?/backtrace", "runtime-nostd?/backtrace"]
 
 # Capabilities
 ## Memory

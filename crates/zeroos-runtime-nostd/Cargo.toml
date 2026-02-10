@@ -9,6 +9,8 @@ crate-type = ["rlib"]
 
 [features]
 default = []
+panic = []
+backtrace = []
 memory = ["foundation/memory"]
 
 [dependencies]

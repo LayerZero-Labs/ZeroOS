@@ -172,7 +172,7 @@ The SDK must implement platform-specific functions to wire ZeroOS into the zkVM.
 | ---------------------- | ------------------ | --------- | ------------------------------------------------------------ |
 | `__platform_bootstrap` | boot.rs            | Yes       | Called by runtime before `main()`                            |
 | `trap_handler`         | trap.rs            | Yes       | Called by `_default_trap_handler` to handle traps            |
-| `platform_exit`        | mod.rs             | Yes       | Called by `foundation::kfn::kexit()` for program termination |
+| `__platform_exit`      | exit.rs            | Yes       | Called by `foundation::kfn::kexit()` for program termination |
 | `_start`               | runtime (assembly) | No (weak) | Program entry point, can override default                    |
 | `_trap_handler`        | runtime (assembly) | No (weak) | Trap vector address, can override default                    |
 

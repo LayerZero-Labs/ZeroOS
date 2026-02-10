@@ -40,7 +40,7 @@ bounds-checks = ["zeroos/bounds-checks"]
 arch-riscv = ["zeroos/arch-riscv"]
 os-linux = ["zeroos/os-linux"]
 runtime-musl = ["zeroos/runtime-musl"]
-backtrace = ["runtime-musl", "zeroos/backtrace"]
+backtrace = ["zeroos/backtrace"]
 
 memory = ["zeroos/alloc-linked-list"]
 vfs = ["zeroos/vfs"]

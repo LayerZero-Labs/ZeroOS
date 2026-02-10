@@ -42,7 +42,7 @@ crates/zeroos-arch-riscv::_trap_handler
 | Symbol                                                         | ABI | Required when          | Used by                    | Purpose                             |
 | -------------------------------------------------------------- | --- | ---------------------- | -------------------------- | ----------------------------------- |
 | `__platform_bootstrap() -> ()`                                 | C   | always (real platform) | `crates/zeroos-arch-riscv` | Early platform init hook            |
-| `platform_exit(code: i32) -> !`                                | C   | always                 | `foundation::kfn::kexit`   | Terminate execution (HTIF on Spike) |
+| `__platform_exit(code: i32) -> !`                              | C   | always                 | `foundation::kfn::kexit`   | Terminate execution (HTIF on Spike) |
 | `trap_handler(regs: *mut zeroos::arch_riscv::TrapFrame) -> ()` | C   | `target_arch=riscv*`   | `crates/zeroos-arch-riscv` | Exception/interrupt handler         |
 | `__debug_write(msg: *const u8, len: usize) -> ()`              | C   | when `debug` is linked | `crates/zeroos-debug`      | Debug output sink                   |
 

@@ -83,6 +83,8 @@ entries:
       - *targets_none_elf_imac
     features:
       - memory
+      - panic
+      - backtrace
 
   - package:
       - zeroos-runtime-musl
@@ -222,3 +224,23 @@ entries:
     commands:
       build: >-
         cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std -- {features_flag} --quiet
+
+  - package: backtrace
+    target:
+      - riscv64imac-unknown-none-elf
+    commands:
+      build: >-
+        cargo spike build --package {package} --target "{target}" -- {features_flag} --quiet
+    features:
+      - with-spike
+      - backtrace
+
+  - package: backtrace
+    target:
+      - *targets_linux_musl_gc
+    commands:
+      build: >-
+        cargo spike build --package {package} --target "riscv64imac-zero-linux-musl" --mode std -- {features_flag} --quiet
+    features:
+      - with-spike
+      - std

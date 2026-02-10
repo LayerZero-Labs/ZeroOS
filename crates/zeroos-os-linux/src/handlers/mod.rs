@@ -9,6 +9,7 @@ use libc;
 pub mod memory;
 #[cfg(feature = "random")]
 pub mod random;
+pub mod signal;
 #[cfg(feature = "scheduler")]
 pub mod thread;
 #[cfg(feature = "vfs")]

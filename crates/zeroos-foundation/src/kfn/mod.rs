@@ -1,12 +1,12 @@
 use cfg_if::cfg_if;
 
 extern "C" {
-    fn platform_exit(code: i32) -> !;
+    fn __platform_exit(code: i32) -> !;
 }
 
 #[inline]
 pub fn kexit(code: i32) -> ! {
-    unsafe { platform_exit(code) }
+    unsafe { __platform_exit(code) }
 }
 
 pub mod thread;

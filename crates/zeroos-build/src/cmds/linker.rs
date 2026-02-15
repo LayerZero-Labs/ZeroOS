@@ -51,7 +51,7 @@ pub fn generate_linker_script(args: &GenerateLinkerArgs) -> Result<LinkerGenerat
         .with_memory(ram_start, ram_size)
         .with_heap_size(heap_size)
         .with_stack_size(stack_size)
-        .with_backtrace(args.backtrace);
+        .with_emit_unwind_tables(args.backtrace);
 
     let mut script_content = cfg.render(Some(
         include_str!("../files/linker.ld.template").to_string(),

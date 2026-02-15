@@ -2,9 +2,11 @@
 members = [
   "xtask",
   "crates/cargo-matrix",
+  "crates/elf-report",
   "crates/htif",
   "crates/mini-template",
   "crates/zeroos",
+  "crates/zeroos-backtrace",
   "crates/zeroos-foundation",
   "crates/zeroos-debug",
   "crates/zeroos-macros",
@@ -43,8 +45,10 @@ description = "ZeroOS"
 [workspace.dependencies]
 # Internal workspace crates
 cargo-matrix = { path = "crates/cargo-matrix" }
+elf-report = { path = "crates/elf-report" }
 mini-template = { path = "crates/mini-template" }
 zeroos = { path = "crates/zeroos" }
+zeroos-backtrace = { path = "crates/zeroos-backtrace" }
 foundation = { path = "crates/zeroos-foundation", package = "zeroos-foundation" }
 debug = { path = "crates/zeroos-debug", package = "zeroos-debug" }
 zeroos-macros = { path = "crates/zeroos-macros" }
@@ -90,6 +94,10 @@ riscv = { version = "0.11", default-features = false }
 clap = { version = "4.5", features = ["derive", "env"] }
 anyhow = "1.0"
 parse-size = "1.0"
+
+# ELF inspection
+object = "0.36"
+rustc-demangle = "0.1"
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

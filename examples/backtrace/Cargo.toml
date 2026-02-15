@@ -13,14 +13,12 @@ cfg-if.workspace = true
 default = []
 
 debug = ["platform/debug"]
-backtrace = ["platform/backtrace"]
 
 std = [
   "platform/std",
   "platform/vfs-device-console",
   "platform/memory",
   "platform/bounds-checks",
-  "platform/backtrace",
 ]
 
 with-spike = ["platform/with-spike"]

@@ -75,7 +75,7 @@ impl DownwardStack<usize> {
     /// Push raw bytes onto the stack, rounded up to `align` bytes.
     /// Returns a pointer (address) to the start of the bytes.
     #[inline(always)]
-    #[cfg(feature = "backtrace")]
+    #[cfg(zeroos_backtrace = "dwarf")]
     fn push_bytes_aligned(&mut self, bytes: &[u8], align: usize) -> usize {
         debug_assert!(align.is_power_of_two());
         let len = bytes.len();
@@ -140,9 +140,23 @@ pub unsafe fn build_musl_stack(
 ) -> usize {
     let mut ds = DownwardStack::<usize>::new(stack_top, stack_bottom);
 
-    // Optional environment variables for musl's `__libc_start_main`:
-    // it computes envp = argv + argc + 1.
-    #[cfg(feature = "backtrace")]
+    // Pre-populate RUST_BACKTRACE environment variable for DWARF mode.
+    //
+    // Why this is necessary:
+    // 1. Rust's std panic handler checks RUST_BACKTRACE to decide whether to print backtraces
+    // 2. Guest programs cannot access host environment variables (isolation)
+    // 3. We pre-populate it on the stack before program execution starts
+    //
+    // Why "full" instead of "1":
+    // - "1" (short mode) requires detecting __rust_begin/end_short_backtrace markers
+    // - Marker detection requires symbol resolution to work in the guest
+    // - In unikernels, all frames are relevant (no meaningful user/stdlib distinction)
+    // - "full" mode prints all frames unconditionally (more reliable for debugging)
+    //
+    // This only happens in DWARF mode because:
+    // - Frame-pointers mode uses custom backtrace walker (not std::backtrace)
+    // - Off mode has no backtrace capability
+    #[cfg(zeroos_backtrace = "dwarf")]
     let rust_backtrace_ptr =
         ds.push_bytes_aligned(b"RUST_BACKTRACE=full\0", core::mem::align_of::<usize>());
 
@@ -199,8 +213,8 @@ pub unsafe fn build_musl_stack(
 
     // envp terminator (always present)
     ds.push(0);
-    // envp[0] (optional)
-    #[cfg(feature = "backtrace")]
+    // envp[0] (optional, only in DWARF mode)
+    #[cfg(zeroos_backtrace = "dwarf")]
     ds.push(rust_backtrace_ptr);
 
     // argv terminator

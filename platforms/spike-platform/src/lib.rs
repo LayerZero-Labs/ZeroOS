@@ -42,8 +42,12 @@ cfg_if::cfg_if! {
         fn panic(info: &core::panic::PanicInfo) -> ! {
             eprintln!("PANIC: {}", info);
 
-            #[cfg(feature = "backtrace")]
-            zeroos::runtime_nostd::backtrace::print_backtrace();
+            // Print backtrace (polymorphic: no-op if mode is "off")
+            // Safety: Called from panic handler with valid stack
+            unsafe {
+                use zeroos::runtime_nostd::BacktraceCapture;
+                zeroos::runtime_nostd::Backtrace::print_backtrace();
+            }
 
             // Exit with SIGABRT (128 + 6 = 134) per Linux convention
             __platform_abort(6)

@@ -14,9 +14,18 @@ pub enum StdMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum BacktraceMode {
+    /// No backtrace support (minimal binary size)
+    Off,
+
+    /// DWARF-based unwinding using `.eh_frame` tables (accurate, ~10-30 KB overhead)
+    Dwarf,
+
+    /// Frame pointer walking (lightweight, ~2-5 KB overhead)
+    #[value(name = "frame-pointers")]
+    FramePointers,
+
+    /// Smart default: dwarf for dev/debug profiles, frame-pointers for release
     Auto,
-    Enable,
-    Disable,
 }
 
 #[derive(clap::Args, Debug, Clone)]
@@ -118,11 +127,13 @@ pub fn build_binary_with_rustflags(
     let target_dir = crate::project::get_target_directory(workspace_root)?;
 
     let profile = crate::project::detect_profile(&args.cargo_args);
-    let backtrace_enabled = should_enable_backtrace(args, &profile);
+    let backtrace_mode = resolve_backtrace_mode(args.backtrace, args.mode);
+    let emit_unwind_tables = matches!(backtrace_mode, BacktraceMode::Dwarf);
 
     debug!("target_dir: {}", target_dir.display());
     debug!("target: {}", target);
     debug!("profile: {}", profile);
+    debug!("backtrace_mode: {:?}", backtrace_mode);
 
     let out_dir = target_dir.join(target).join(&profile);
     let crate_out_dir = out_dir.join("zeroos").join(&args.package);
@@ -133,7 +144,7 @@ pub fn build_binary_with_rustflags(
         .with_memory(memory_origin, memory_size)
         .with_stack_size(stack_size)
         .with_heap_size(heap_size)
-        .with_backtrace(backtrace_enabled);
+        .with_emit_unwind_tables(emit_unwind_tables);
 
     let config = if let Some(template) = linker_template {
         config.with_template(template)
@@ -153,9 +164,7 @@ pub fn build_binary_with_rustflags(
                 write_target_spec(
                     target_spec_path,
                     target,
-                    TargetRenderOptions {
-                        backtrace: backtrace_enabled,
-                    },
+                    TargetRenderOptions { emit_unwind_tables },
                 )
                 .ok();
                 Some(crate_out_dir.clone())
@@ -199,11 +208,27 @@ pub fn build_binary_with_rustflags(
         }
     }
 
-    // In unwind-table-based backtraces, we need DWARF CFI tables even with `panic=abort`.
-    // This forces `.eh_frame` emission for Rust code when backtraces are enabled.
-    if args.mode == StdMode::Std && backtrace_enabled {
-        rustflags_parts.push("-C".to_string());
-        rustflags_parts.push("force-unwind-tables=yes".to_string());
+    // Set cfg flag for conditional compilation based on backtrace mode
+    match backtrace_mode {
+        BacktraceMode::Off => {
+            rustflags_parts.push("--cfg".to_string());
+            rustflags_parts.push("zeroos_backtrace=\"off\"".to_string());
+        }
+        BacktraceMode::Dwarf => {
+            rustflags_parts.push("--cfg".to_string());
+            rustflags_parts.push("zeroos_backtrace=\"dwarf\"".to_string());
+            // Force emission of .eh_frame tables for DWARF unwinding
+            rustflags_parts.push("-C".to_string());
+            rustflags_parts.push("force-unwind-tables=yes".to_string());
+        }
+        BacktraceMode::FramePointers => {
+            rustflags_parts.push("--cfg".to_string());
+            rustflags_parts.push("zeroos_backtrace=\"frame_pointers\"".to_string());
+            // Force frame pointer maintenance for stack walking
+            rustflags_parts.push("-C".to_string());
+            rustflags_parts.push("force-frame-pointers=yes".to_string());
+        }
+        BacktraceMode::Auto => unreachable!("Auto mode should be resolved earlier"),
     }
 
     for arg in &link_args {
@@ -355,15 +380,17 @@ use crate::cmds::GenerateTargetArgs;
 
 pub use crate::project::find_workspace_root;
 
-fn should_enable_backtrace(args: &BuildArgs, profile: &str) -> bool {
-    match args.backtrace {
-        BacktraceMode::Enable => true,
-        BacktraceMode::Disable => false,
-        BacktraceMode::Auto => {
-            // Default split:
-            // - debug/dev profiles: on
-            // - release/other profiles: off
-            matches!(profile, "debug" | "dev")
-        }
+/// Resolve backtrace mode based on std mode if Auto is selected.
+///
+/// Default behavior when Auto is selected:
+/// - Std mode: Dwarf (requires unwind tables, works with std panic handler)
+/// - NoStd mode: FramePointers (lightweight, no unwind tables needed)
+fn resolve_backtrace_mode(mode: BacktraceMode, std_mode: StdMode) -> BacktraceMode {
+    match mode {
+        BacktraceMode::Auto => match std_mode {
+            StdMode::Std => BacktraceMode::Dwarf,
+            StdMode::NoStd => BacktraceMode::FramePointers,
+        },
+        other => other,
     }
 }

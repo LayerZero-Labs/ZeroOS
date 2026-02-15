@@ -360,7 +360,7 @@ fn generate_target_command(cli_args: ZeroosGenerateTargetArgs) -> Result<()> {
     let json_content = generate_target_spec(
         &cli_args.base,
         TargetRenderOptions {
-            backtrace: cli_args.backtrace,
+            emit_unwind_tables: cli_args.backtrace,
         },
     )
     .map_err(|e| anyhow::anyhow!("{}", e))?;

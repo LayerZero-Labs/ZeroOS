@@ -61,6 +61,11 @@ version_group = "zeroos"
 release = false
 
 [[package]]
+name = "zeroos-backtrace"
+version_group = "zeroos"
+release = false
+
+[[package]]
 name = "zeroos-build"
 version_group = "zeroos"
 release = false

@@ -35,7 +35,7 @@ SECTIONS
         . = ALIGN(8);
     } > RAM : rodata
 
-    {% if backtrace %}
+    {% if EMIT_UNWIND_TABLES %}
     .eh_frame_hdr : ALIGN(4) {
         PROVIDE_HIDDEN(__eh_frame_hdr_start = .);
         KEEP(*(.eh_frame_hdr))

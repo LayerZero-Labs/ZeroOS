@@ -35,9 +35,6 @@ runtime-musl = ["dep:runtime-musl"]
 runtime-gnu = ["dep:runtime-gnu"]
 panic = ["runtime-nostd?/panic"]
 
-# Backtraces
-backtrace = ["runtime-musl?/backtrace", "runtime-nostd?/backtrace"]
-
 # Capabilities
 ## Memory
 memory = ["foundation/memory", "runtime-nostd?/memory", "os-linux?/memory"]
@@ -60,6 +57,11 @@ scheduler-cooperative = ["scheduler", "dep:scheduler-cooperative"]
 random = ["foundation/random", "os-linux?/random"]
 rng-lcg = ["random", "dep:rng", "rng/lcg"]
 rng-chacha = ["random", "dep:rng", "rng/chacha"]
+
+## Backtrace (controlled via cfg, not features)
+# Note: Actual backtrace mode is set via cfg(zeroos_backtrace) by the build system
+# This feature exists for compatibility but doesn't enable additional dependencies
+backtrace = []
 
 [dependencies]
 debug = { workspace = true }

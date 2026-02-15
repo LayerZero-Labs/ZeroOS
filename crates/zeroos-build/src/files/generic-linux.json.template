@@ -38,13 +38,13 @@
   "supported-split-debuginfo": [
     "off"
   ],
-  "eh-frame-header": {{ BACKTRACE }},
+  "eh-frame-header": {{ EMIT_UNWIND_TABLES }},
   "metadata": {
     "description": "RISC-V 64-bit with minimal musl-like environment",
     "tier": 3,
     "host-tools": false,
     "std": true
   },
-  "requires-uwtable": {{ BACKTRACE }},
-  "default-uwtable": {{ BACKTRACE }}
+  "requires-uwtable": {{ EMIT_UNWIND_TABLES }},
+  "default-uwtable": {{ EMIT_UNWIND_TABLES }}
 }

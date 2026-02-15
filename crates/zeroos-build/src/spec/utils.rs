@@ -6,12 +6,15 @@ use mini_template as ztpl;
 
 #[derive(Debug, Clone, Copy)]
 pub struct TargetRenderOptions {
-    pub backtrace: bool,
+    /// Whether to emit DWARF unwind tables (.eh_frame sections)
+    pub emit_unwind_tables: bool,
 }
 
 impl Default for TargetRenderOptions {
     fn default() -> Self {
-        Self { backtrace: true }
+        Self {
+            emit_unwind_tables: true,
+        }
     }
 }
 
@@ -65,7 +68,14 @@ impl TargetConfig {
             .with_str("VENDOR", &self.vendor)
             .with_str("MAX_ATOMIC_WIDTH", arch_spec.max_atomic_width.to_string())
             // JSON booleans (rendered without quotes in template)
-            .with_str("BACKTRACE", if opts.backtrace { "true" } else { "false" });
+            .with_str(
+                "EMIT_UNWIND_TABLES",
+                if opts.emit_unwind_tables {
+                    "true"
+                } else {
+                    "false"
+                },
+            );
 
         ztpl::render(template, &ctx).map_err(|e| e.to_string())
     }

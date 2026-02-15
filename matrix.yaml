@@ -38,6 +38,7 @@ entries:
       - xtask
       - cargo-matrix
       - mini-template
+      - elf-report
       - zeroos-build
       - spike-build
     target:
@@ -46,6 +47,7 @@ entries:
   - package:
       - zeroos-debug
       - zeroos-macros
+      - zeroos-backtrace
     target:
       - *host_targets
       - *guest_targets
@@ -233,7 +235,6 @@ entries:
         cargo spike build --package {package} --target "{target}" -- {features_flag} --quiet
     features:
       - with-spike
-      - backtrace
 
   - package: backtrace
     target:

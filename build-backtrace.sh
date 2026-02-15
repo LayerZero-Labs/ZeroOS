@@ -22,9 +22,8 @@ TARGET_TRIPLE="riscv64imac-unknown-none-elf"
 OUT_DIR="${ROOT}/target/${TARGET_TRIPLE}/$([ "$PROFILE" = "dev" ] && echo debug || echo "$PROFILE")"
 BIN="${OUT_DIR}/backtrace"
 
-# Enable frame pointers for accurate stack traces
-export RUSTFLAGS="${RUSTFLAGS:-} -Cforce-frame-pointers=yes"
-cargo spike build -p backtrace --target "${TARGET_TRIPLE}" -- --quiet --features=with-spike,backtrace --profile "${PROFILE}"
+# Use frame pointer walking for no-std mode (lightweight)
+cargo spike build -p backtrace --target "${TARGET_TRIPLE}" --backtrace=frame-pointers -- --quiet --features=with-spike --profile "${PROFILE}"
 
 echo "Running backtrace example (no-std) - expect panic ..."
 # The example intentionally panics, so we capture exit code but continue
@@ -34,7 +33,25 @@ cargo spike run "${BIN}" --isa RV64IMAC --instructions 10000000 --symbolize-back
 # Verify panic message and backtrace appears
 grep -q "intentional panic for backtrace demo" "${OUT_NOSTD}"
 grep -q "stack backtrace:" "${OUT_NOSTD}"
-echo "no-std backtrace test PASSED"
+echo "no-std + frame-pointers test PASSED"
+echo ""
+
+# no-std mode with backtrace off
+echo "Building backtrace example in no-std mode (off) ..."
+cargo spike build -p backtrace --target "${TARGET_TRIPLE}" --backtrace=off -- --quiet --features=with-spike --profile "${PROFILE}"
+
+echo "Running backtrace example (no-std + off) - expect panic without backtrace ..."
+OUT_NOSTD_OFF="$(mktemp)"
+trap 'rm -f "${OUT_NOSTD}" "${OUT_STD}" "${OUT_NOSTD_OFF}"' EXIT
+cargo spike run "${BIN}" --isa RV64IMAC --instructions 10000000 2>&1 | tee "${OUT_NOSTD_OFF}" || true
+
+grep -q "intentional panic for backtrace demo" "${OUT_NOSTD_OFF}"
+# Verify NO backtrace
+if grep -q "stack backtrace:" "${OUT_NOSTD_OFF}"; then
+	echo "ERROR: backtrace appeared in off mode!"
+	exit 1
+fi
+echo "no-std + off test PASSED (no backtrace as expected)"
 echo ""
 
 # std mode
@@ -44,7 +61,7 @@ TARGET_TRIPLE="riscv64imac-zero-linux-musl"
 OUT_DIR="${ROOT}/target/${TARGET_TRIPLE}/$([ "$PROFILE" = "dev" ] && echo debug || echo "$PROFILE")"
 BIN="${OUT_DIR}/backtrace"
 
-cargo spike build -p backtrace --target "${TARGET_TRIPLE}" --mode std --backtrace=enable -- --quiet --features=std,with-spike --profile "${PROFILE}"
+cargo spike build -p backtrace --target "${TARGET_TRIPLE}" --mode std --backtrace=dwarf -- --quiet --features=std,with-spike --profile "${PROFILE}"
 
 echo "Running backtrace example (std) - expect panic ..."
 # The example intentionally panics, so we capture exit code but continue
@@ -55,4 +72,43 @@ grep -q "intentional panic for backtrace demo" "${OUT_STD}"
 echo "std backtrace test PASSED"
 
 echo ""
+echo ""
+echo "Building backtrace example in std mode (frame-pointers) ..."
+cargo spike build -p backtrace --target "${TARGET_TRIPLE}" --mode std --backtrace=frame-pointers -- --quiet --features=std,with-spike --profile "${PROFILE}"
+
+echo "Running backtrace example (std + frame-pointers) - expect panic ..."
+OUT_STD_FP="$(mktemp)"
+trap 'rm -f "${OUT_NOSTD}" "${OUT_STD}" "${OUT_NOSTD_OFF}" "${OUT_STD_FP}"' EXIT
+cargo spike run "${BIN}" --isa RV64IMAC --instructions 100000000 --symbolize-backtrace 2>&1 | tee "${OUT_STD_FP}" || true
+
+grep -q "intentional panic for backtrace demo" "${OUT_STD_FP}"
+# Note: std + frame-pointers doesn't print backtrace with default panic hook
+# (Rust's std::backtrace requires DWARF; would need custom panic hook for frame-pointers)
+# Just verify binary builds and runs
+grep -q "stack backtrace:" "${OUT_STD_FP}"
+echo "std + frame-pointers backtrace test PASSED"
+
+echo ""
+echo "Building backtrace example in std mode (off) ..."
+cargo spike build -p backtrace --target "${TARGET_TRIPLE}" --mode std --backtrace=off -- --quiet --features=std,with-spike --profile "${PROFILE}"
+
+echo "Running backtrace example (std + off) - expect panic without backtrace ..."
+OUT_STD_OFF="$(mktemp)"
+trap 'rm -f "${OUT_NOSTD}" "${OUT_STD}" "${OUT_STD_FP}" "${OUT_STD_OFF}"' EXIT
+cargo spike run "${BIN}" --isa RV64IMAC --instructions 100000000 --symbolize-backtrace 2>&1 | tee "${OUT_STD_OFF}" || true
+
+grep -q "intentional panic for backtrace demo" "${OUT_STD_OFF}"
+# Verify NO backtrace appears
+if grep -q "stack backtrace:" "${OUT_STD_OFF}"; then
+	echo "ERROR: backtrace appeared in off mode!"
+	exit 1
+fi
+echo "std + off mode test PASSED (no backtrace as expected)"
+
+echo ""
 echo "All backtrace tests completed successfully."
+echo "  - no-std + frame-pointers: ✓"
+echo "  - no-std + off: ✓"
+echo "  - std + dwarf: ✓"
+echo "  - std + frame-pointers: ✓"
+echo "  - std + off: ✓"

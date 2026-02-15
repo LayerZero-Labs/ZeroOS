@@ -12,6 +12,7 @@ crate-type = ["rlib"]
 [dependencies]
 debug.workspace = true
 foundation.workspace = true
+zeroos-backtrace = { workspace = true }
 
 [features]
 default = []

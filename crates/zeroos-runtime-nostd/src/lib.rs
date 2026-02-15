@@ -24,6 +24,6 @@ cfg_if! {
 #[cfg(feature = "panic")]
 pub mod panic;
 
-// Stack backtrace via frame pointer walking
-#[cfg(feature = "backtrace")]
-pub mod backtrace;
+// Concrete implementation (NoopBacktrace, DwarfBacktrace, or FramePointerBacktrace)
+// selected at compile time via cfg(zeroos_backtrace = "off"|"dwarf"|"frame_pointers")
+pub use zeroos_backtrace::{Backtrace, BacktraceCapture};

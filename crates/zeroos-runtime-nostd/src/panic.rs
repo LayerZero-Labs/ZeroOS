@@ -15,9 +15,6 @@ use core::panic::PanicInfo;
 
 use crate::io::StdoutWriter;
 
-#[cfg(feature = "backtrace")]
-use crate::backtrace;
-
 /// Standard signal number for abort (SIGABRT)
 const SIGABRT: i32 = 6;
 
@@ -70,9 +67,12 @@ fn panic(info: &PanicInfo) -> ! {
         let _ = writeln!(w, "PANIC: panicked: {}", info.message());
     }
 
-    // Print stack backtrace if feature enabled
-    #[cfg(feature = "backtrace")]
-    backtrace::print_backtrace();
+    // Print stack backtrace (polymorphic: no-op if zeroos_backtrace="off")
+    // Safety: Called from panic handler with valid stack state
+    unsafe {
+        use crate::BacktraceCapture;
+        crate::Backtrace::print_backtrace();
+    }
 
     // Call platform-specific abort handler with SIGABRT
     // This will exit with code 128 + 6 = 134

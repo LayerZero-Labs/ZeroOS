@@ -137,7 +137,16 @@ fn sh(cmd: ShCmd, opts: ShOptions) -> Result<ShOutput> {
         cleanup: Option<&Path>,
     ) -> Result<ShOutput> {
         opts.apply(&mut c);
-        let output = c.output()?;
+        let output = match c.output() {
+            Ok(o) => o,
+            Err(e) => {
+                if let Some(p) = cleanup {
+                    let _ = std::fs::remove_file(p);
+                }
+
+                return Err(format!("Failed to execute command: {}\nError: {}", desc, e).into());
+            }
+        };
         if let Some(p) = cleanup {
             let _ = std::fs::remove_file(p);
         }
@@ -421,31 +430,37 @@ macro_rules! fmt_task {
     };
 }
 
+// Helper to extract packages from changed files
+fn extract_matrix_packages(ctx: &Context, files: &[PathBuf]) -> Vec<String> {
+    let interesting = filter!(files, ["*.rs", "Cargo.toml"]);
+
+    let manifests: HashSet<PathBuf> = interesting
+        .iter()
+        .filter_map(|f| find_upwards_bounded(f, &["Cargo.toml"], &ctx.root))
+        .map(|m| if m.is_absolute() { m } else { ctx.root.join(m) })
+        .collect();
+
+    let mut packages: Vec<String> = manifests
+        .iter()
+        .filter_map(|m| package_name_from_manifest(m))
+        .collect();
+    packages.sort();
+    packages.dedup();
+
+    packages
+        .into_iter()
+        .filter(|p| matrix_has_package(ctx, p))
+        .collect()
+}
+
 // Rust tasks
 define_task!(
-    RustClippyTask,
-    name = "rust_clippy",
+    RustFixTask,
+    name = "rust_fix",
     depends_on = [],
     run = |ctx: &Context, files: &[PathBuf]| {
         let interesting = filter!(files, ["*.rs", "Cargo.toml"]);
-
-        let manifests: HashSet<PathBuf> = interesting
-            .iter()
-            .filter_map(|f| find_upwards_bounded(f, &["Cargo.toml"], &ctx.root))
-            .map(|m| if m.is_absolute() { m } else { ctx.root.join(m) })
-            .collect();
-
-        let mut packages: Vec<String> = manifests
-            .iter()
-            .filter_map(|m| package_name_from_manifest(m))
-            .collect();
-        packages.sort();
-        packages.dedup();
-
-        let filtered: Vec<String> = packages
-            .into_iter()
-            .filter(|p| matrix_has_package(ctx, p))
-            .collect();
+        let filtered = extract_matrix_packages(ctx, files);
 
         if filtered.is_empty() {
             return Ok(interesting);
@@ -465,6 +480,104 @@ define_task!(
         }
         argv.push("--command".into());
         argv.push("fix".into());
+
+        let mut opts = pipe_opts().clone();
+        opts.cwd = Some(ctx.root.clone());
+        sh(ShCmd::Argv("cargo".into(), argv), opts)?;
+
+        Ok(interesting)
+    }
+);
+
+define_task!(
+    RustClippyTask,
+    name = "rust_clippy",
+    depends_on = ["rust_fix"],
+    run = |ctx: &Context, files: &[PathBuf]| {
+        let interesting = filter!(files, ["*.rs", "Cargo.toml"]);
+        let filtered = extract_matrix_packages(ctx, files);
+
+        if filtered.is_empty() {
+            return Ok(interesting);
+        }
+
+        let mut argv: Vec<std::ffi::OsString> = vec![
+            "run".into(),
+            "-q".into(),
+            "-p".into(),
+            "xtask".into(),
+            "--".into(),
+            "matrix".into(),
+        ];
+        for p in &filtered {
+            argv.push("-p".into());
+            argv.push(p.into());
+        }
+        argv.push("--command".into());
+        argv.push("clippy".into());
+
+        let mut opts = pipe_opts().clone();
+        opts.cwd = Some(ctx.root.clone());
+        sh(ShCmd::Argv("cargo".into(), argv), opts)?;
+
+        Ok(interesting)
+    }
+);
+
+define_task!(
+    RustCheckTask,
+    name = "rust_check",
+    depends_on = ["rust_clippy"],
+    run = |ctx: &Context, files: &[PathBuf]| {
+        let interesting = filter!(files, ["*.rs", "Cargo.toml"]);
+        let filtered = extract_matrix_packages(ctx, files);
+
+        if filtered.is_empty() {
+            return Ok(interesting);
+        }
+
+        let mut argv: Vec<std::ffi::OsString> = vec![
+            "run".into(),
+            "-q".into(),
+            "-p".into(),
+            "xtask".into(),
+            "--".into(),
+            "matrix".into(),
+        ];
+        for p in &filtered {
+            argv.push("-p".into());
+            argv.push(p.into());
+        }
+        argv.push("--command".into());
+        argv.push("check".into());
+
+        let mut opts = pipe_opts().clone();
+        opts.cwd = Some(ctx.root.clone());
+        sh(ShCmd::Argv("cargo".into(), argv), opts)?;
+
+        Ok(interesting)
+    }
+);
+
+define_task!(
+    RustCheckWorkspace,
+    name = "rust_check_workspace",
+    depends_on = [],
+    run = |ctx: &Context, files: &[PathBuf]| {
+        let interesting = filter!(files, ["*.rs", "Cargo.toml", "release-plz.toml"]);
+
+        if interesting.is_empty() {
+            return Ok(interesting);
+        }
+
+        let argv: Vec<std::ffi::OsString> = vec![
+            "run".into(),
+            "-q".into(),
+            "-p".into(),
+            "xtask".into(),
+            "--".into(),
+            "check-workspace".into(),
+        ];
 
         let mut opts = pipe_opts().clone();
         opts.cwd = Some(ctx.root.clone());
@@ -513,6 +626,18 @@ fn main() {
             writeln!(buf, "[{}] {}", record.target(), record.args())
         })
         .init();
+
+    // Expand PATH to include common tool installation locations
+    if let (Ok(current_path), Ok(home)) = (env::var("PATH"), env::var("HOME")) {
+        let extra_paths = vec![
+            format!("{}/.deno/bin", home),
+            format!("{}/.cargo/bin", home),
+            format!("{}/go/bin", home),
+            format!("{}/.local/bin", home),
+        ];
+        let expanded_path = format!("{}:{}", extra_paths.join(":"), current_path);
+        env::set_var("PATH", expanded_path);
+    }
 
     if let Err(e) = run() {
         log::error!("[pre-commit] error: {e}");
@@ -583,7 +708,10 @@ fn run() -> Result<()> {
     };
 
     let tasks: Vec<Box<dyn Task>> = vec![
+        Box::new(RustCheckWorkspace::default()),
+        Box::new(RustFixTask::default()),
         Box::new(RustClippyTask::default()),
+        Box::new(RustCheckTask::default()),
         Box::new(RustFmtTask::default()),
         Box::new(ShellFmtTask::default()),
         Box::new(TomlFmtTask::default()),

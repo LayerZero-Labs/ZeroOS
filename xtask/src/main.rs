@@ -1,9 +1,6 @@
-mod act;
-mod check_workspace;
+mod cmds;
 mod findup;
-mod massage;
 mod sh;
-mod spike_syscall_instcount;
 
 use clap::{Parser, Subcommand};
 
@@ -20,26 +17,30 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Run the 'massage' task
-    Massage(massage::MassageArgs),
+    Massage(cmds::massage::MassageArgs),
     /// Run a curated matrix of cargo commands (targets/features) from config
     Matrix(cargo_matrix::MatrixArgs),
     /// Run GitHub Actions locally via `act` (forwards all args to the `act` CLI)
-    Act(act::ActArgs),
+    Act(cmds::act::ActArgs),
     /// Measure syscall instruction-count "cost" using Spike commit logs.
     #[command(name = "spike-syscall-instcount")]
-    SpikeSyscallInstCount(spike_syscall_instcount::SpikeSyscallInstCountArgs),
+    SpikeSyscallInstCount(cmds::spike_syscall_instcount::SpikeSyscallInstCountArgs),
     /// Check workspace consistency (versions, dependencies)
     #[command(name = "check-workspace")]
-    CheckWorkspace(check_workspace::CheckWorkspaceArgs),
+    CheckWorkspace(cmds::check_workspace::CheckWorkspaceArgs),
+    /// Analyze binary sizes for different backtrace modes
+    #[command(name = "analyze-backtrace")]
+    AnalyzeBacktrace(cmds::analyze_backtrace::AnalyzeBacktraceArgs),
 }
 
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     match cli.command {
-        Command::Massage(args) => massage::run(args),
+        Command::Massage(args) => cmds::massage::run(args),
         Command::Matrix(args) => cargo_matrix::run(args).map_err(|e| e.into()),
-        Command::Act(args) => act::run(args),
-        Command::SpikeSyscallInstCount(args) => spike_syscall_instcount::run(args),
-        Command::CheckWorkspace(args) => check_workspace::run(args).map_err(|e| e.into()),
+        Command::Act(args) => cmds::act::run(args),
+        Command::SpikeSyscallInstCount(args) => cmds::spike_syscall_instcount::run(args),
+        Command::CheckWorkspace(args) => cmds::check_workspace::run(args).map_err(|e| e.into()),
+        Command::AnalyzeBacktrace(args) => cmds::analyze_backtrace::run(args).map_err(|e| e.into()),
     }
 }
 

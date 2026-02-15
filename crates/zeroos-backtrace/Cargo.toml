@@ -1,0 +1,10 @@
+[package]
+name = "zeroos-backtrace"
+version.workspace = true
+edition = "2024"
+license = "MIT OR Apache-2.0"
+description = "Unified backtrace abstraction for ZeroOS with multiple unwinding strategies"
+
+[dependencies]
+zeroos-macros = { workspace = true }
+cfg-if = { workspace = true }

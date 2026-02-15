@@ -13,7 +13,8 @@ pub struct LinkerConfig {
 
     pub stack_size: usize,
 
-    pub backtrace: bool,
+    /// Whether to emit DWARF unwind tables (.eh_frame sections)
+    pub emit_unwind_tables: bool,
 
     template: Option<String>,
 }
@@ -31,7 +32,7 @@ impl LinkerConfig {
             memory_size: DEFAULT_MEMORY_SIZE,
             heap_size: None,
             stack_size: DEFAULT_STACK_SIZE,
-            backtrace: false,
+            emit_unwind_tables: false,
             template: None,
         }
     }
@@ -57,8 +58,8 @@ impl LinkerConfig {
         self
     }
 
-    pub fn with_backtrace(mut self, backtrace: bool) -> Self {
-        self.backtrace = backtrace;
+    pub fn with_emit_unwind_tables(mut self, backtrace: bool) -> Self {
+        self.emit_unwind_tables = backtrace;
         self
     }
 
@@ -86,7 +87,7 @@ impl LinkerConfig {
             .or(self.template.as_deref())
             .unwrap_or(LINKER_SCRIPT_TEMPLATE);
         let ctx = ztpl::Context::new()
-            .with_bool("backtrace", self.backtrace)
+            .with_bool("EMIT_UNWIND_TABLES", self.emit_unwind_tables)
             .with_str("MEMORY_ORIGIN", origin)
             .with_str("MEMORY_SIZE", mem_size)
             .with_str("HEAP_SIZE", heap_size)

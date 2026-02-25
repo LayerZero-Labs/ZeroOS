@@ -33,120 +33,26 @@ pub trait KRandom: Sized {
     fn random() -> Self;
 }
 
-impl KRandom for u8 {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0u8;
-        unsafe { krandom(&mut val as *mut u8, 1) };
-        val
-    }
+/// Macro to implement KRandom trait for integer types.
+/// Reduces boilerplate from 12 separate implementations to a single macro invocation.
+macro_rules! impl_krandom {
+    ($($t:ty),* $(,)?) => {
+        $(
+            impl KRandom for $t {
+                #[inline]
+                fn random() -> Self {
+                    let mut val: $t = 0;
+                    unsafe {
+                        krandom(
+                            &mut val as *mut $t as *mut u8,
+                            core::mem::size_of::<$t>(),
+                        )
+                    };
+                    val
+                }
+            }
+        )*
+    };
 }
 
-impl KRandom for u16 {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0u16;
-        unsafe { krandom(&mut val as *mut u16 as *mut u8, 2) };
-        val
-    }
-}
-
-impl KRandom for u32 {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0u32;
-        unsafe { krandom(&mut val as *mut u32 as *mut u8, 4) };
-        val
-    }
-}
-
-impl KRandom for u64 {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0u64;
-        unsafe { krandom(&mut val as *mut u64 as *mut u8, 8) };
-        val
-    }
-}
-
-impl KRandom for u128 {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0u128;
-        unsafe { krandom(&mut val as *mut u128 as *mut u8, 16) };
-        val
-    }
-}
-
-impl KRandom for usize {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0usize;
-        unsafe {
-            krandom(
-                &mut val as *mut usize as *mut u8,
-                core::mem::size_of::<usize>(),
-            )
-        };
-        val
-    }
-}
-
-impl KRandom for i8 {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0i8;
-        unsafe { krandom(&mut val as *mut i8 as *mut u8, 1) };
-        val
-    }
-}
-
-impl KRandom for i16 {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0i16;
-        unsafe { krandom(&mut val as *mut i16 as *mut u8, 2) };
-        val
-    }
-}
-
-impl KRandom for i32 {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0i32;
-        unsafe { krandom(&mut val as *mut i32 as *mut u8, 4) };
-        val
-    }
-}
-
-impl KRandom for i64 {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0i64;
-        unsafe { krandom(&mut val as *mut i64 as *mut u8, 8) };
-        val
-    }
-}
-
-impl KRandom for i128 {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0i128;
-        unsafe { krandom(&mut val as *mut i128 as *mut u8, 16) };
-        val
-    }
-}
-
-impl KRandom for isize {
-    #[inline]
-    fn random() -> Self {
-        let mut val = 0isize;
-        unsafe {
-            krandom(
-                &mut val as *mut isize as *mut u8,
-                core::mem::size_of::<isize>(),
-            )
-        };
-        val
-    }
-}
+impl_krandom!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize);

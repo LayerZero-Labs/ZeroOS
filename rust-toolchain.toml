@@ -1,5 +1,5 @@
 [toolchain]
-channel = "1.90"
+channel = "1.94"
 targets = [
   "riscv64imac-unknown-none-elf",
   "riscv32imac-unknown-none-elf",

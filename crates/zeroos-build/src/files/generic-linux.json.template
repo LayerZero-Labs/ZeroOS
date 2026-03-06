@@ -6,7 +6,7 @@
   "llvm-abiname": "{{ ABI }}",
   "data-layout": "{{ DATA_LAYOUT }}",
   "target-endian": "{{ ENDIAN }}",
-  "target-pointer-width": "{{ POINTER_WIDTH }}",
+  "target-pointer-width": {{ POINTER_WIDTH }},
   "os": "{{ OS }}",
   "env": "{{ ENV }}",
   "vendor": "{{ VENDOR }}",

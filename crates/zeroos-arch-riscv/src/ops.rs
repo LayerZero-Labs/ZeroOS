@@ -130,7 +130,7 @@ pub const ARCH_OPS: ArchOps = ArchOps {
     thread_ctx_set_ra: crate::thread_ctx::thread_ctx_set_ra,
     thread_ctx_set_retval: crate::thread_ctx::thread_ctx_set_retval,
     switch_to,
-    ret_from_fork: || ret_from_fork as usize,
+    ret_from_fork: || ret_from_fork as *const () as usize,
     trap_frame_clone,
     trap_frame_init,
     trap_frame_set_retval,

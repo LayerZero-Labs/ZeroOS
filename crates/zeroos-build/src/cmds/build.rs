@@ -64,6 +64,15 @@ pub struct BuildArgs {
     #[arg(long, env = "RISCV_GCC_PATH")]
     pub gcc_lib_path: Option<PathBuf>,
 
+    /// Disable the LLVM machine outliner for this guest build.
+    ///
+    /// The machine outliner extracts repeated instruction sequences into helper functions
+    /// named `OUTLINED_FUNCTION_*`. This is usually a win for code size, but it corrupts
+    /// cycle-count measurements by splitting hot paths across synthetic symbols. Use this
+    /// flag in any build where symbol-level cycle attribution must be exact.
+    #[arg(long)]
+    pub no_machine_outliner: bool,
+
     /// Arguments after `--` are forwarded to the underlying `cargo build` invocation.
     ///
     /// Example:
@@ -197,16 +206,13 @@ pub fn build_binary_with_rustflags(
         debug!("  link_arg[{}]: {}", i, arg);
     }
 
-    let mut rustflags_parts: Vec<String> = std::env::var("CARGO_ENCODED_RUSTFLAGS")
-        .ok()
-        .map(|s| s.split('\x1f').map(|s| s.to_string()).collect())
-        .unwrap_or_default();
-
-    if let Ok(rustflags) = std::env::var("RUSTFLAGS") {
-        for flag in rustflags.split_whitespace() {
-            rustflags_parts.push(flag.to_string());
-        }
-    }
+    // Start from an empty set — only flags we explicitly construct belong in a RISC-V
+    // cross-compilation. Neither RUSTFLAGS nor CARGO_ENCODED_RUSTFLAGS are forwarded here
+    // because those variables target the host build and can contain host-specific flags
+    // (e.g. -C target-cpu=native, -C embed-bitcode=yes) that LLVM rejects for riscv64imac.
+    // Callers that need to inject guest-specific flags should use --no-machine-outliner,
+    // additional_rustflags, or the ZEROOS_GUEST_RUSTFLAGS env var (see below).
+    let mut rustflags_parts: Vec<String> = Vec::new();
 
     // Set cfg flag for conditional compilation based on backtrace mode
     match backtrace_mode {
@@ -237,9 +243,25 @@ pub fn build_binary_with_rustflags(
         rustflags_parts.push("-Zmacro-backtrace".to_string());
     }
 
-    // Add platform-specific rustflags
+    // Add platform-specific rustflags from the caller.
     if let Some(flags) = additional_rustflags {
         for flag in flags {
+            rustflags_parts.push(flag.to_string());
+        }
+    }
+
+    // Disable the LLVM machine outliner when requested. The outliner extracts repeated
+    // instruction sequences into OUTLINED_FUNCTION_* stubs, which corrupts cycle-count
+    // measurements by splitting hot paths across synthetic symbols.
+    if args.no_machine_outliner {
+        rustflags_parts.push("-Cllvm-args=-enable-machine-outliner=never".to_string());
+    }
+
+    // ZEROOS_GUEST_RUSTFLAGS: explicit opt-in escape hatch for guest-only flags.
+    // This is intentionally separate from RUSTFLAGS (which targets the host) so callers
+    // can't accidentally leak host-CPU-specific flags into the RISC-V cross-compilation.
+    if let Ok(guest_flags) = std::env::var("ZEROOS_GUEST_RUSTFLAGS") {
+        for flag in guest_flags.split_ascii_whitespace() {
             rustflags_parts.push(flag.to_string());
         }
     }

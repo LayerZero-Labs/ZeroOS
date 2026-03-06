@@ -4,7 +4,8 @@ set -eu -o pipefail
 
 TARGET_OS=""
 
-readonly ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd))"
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd))"
+readonly ROOT
 readonly TMPDIR=${TMPDIR:-/tmp}
 
 readonly RISCV_DIR="$HOME/.local/riscv"

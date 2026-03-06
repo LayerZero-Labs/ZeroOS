@@ -14,13 +14,12 @@ cd "${ROOT}"
 echo "Building syscall-cycles example in std mode ..."
 if [[ "${PROFILE}" = "release" ]]; then
 	# Keep release profile tuning explicit (avoid per-crate [profile.release] warnings).
-	# Disable machine outliner to avoid OUTLINED_FUNCTION_* symbols interfering with cycle counts.
+	# --no-machine-outliner prevents OUTLINED_FUNCTION_* symbols from corrupting cycle counts.
 	CARGO_PROFILE_RELEASE_DEBUG=2 \
 		CARGO_PROFILE_RELEASE_STRIP=none \
 		CARGO_PROFILE_RELEASE_LTO=true \
 		CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
-		RUSTFLAGS="${RUSTFLAGS:-} -Cllvm-args=-enable-machine-outliner=never" \
-		cargo spike build -p syscall-cycles --target "${TARGET_TRIPLE}" --mode std -- --quiet --features=std --profile "${PROFILE}"
+		cargo spike build -p syscall-cycles --target "${TARGET_TRIPLE}" --mode std --no-machine-outliner -- --quiet --features=std --profile "${PROFILE}"
 else
 	cargo spike build -p syscall-cycles --target "${TARGET_TRIPLE}" --mode std -- --quiet --features=std --profile "${PROFILE}"
 fi

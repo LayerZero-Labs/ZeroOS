@@ -1,6 +1,6 @@
 [package]
 name = "cargo-matrix"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Run a curated matrix of cargo commands (targets/features) from a YAML config"
 
